@@ -46,11 +46,11 @@ __global__ void gpuBackProjectKernel(float * d_hist, int * d_hueArray, int hueAr
 
 
 
-     // d_backproj[i] = probability; //for M00
+    d_backproj[i] = probability; //for M00
 
 // d_backproj[i] = ((float)(col + xOffset)) * probability; //for M1x
 
-      d_backproj[i] = ((float)(row + yOffset)) * probability; //for M1y
+     // d_backproj[i] = ((float)(row + yOffset)) * probability; //for M1y
   }
 
 }//end kernel

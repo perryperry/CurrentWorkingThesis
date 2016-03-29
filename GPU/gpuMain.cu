@@ -38,7 +38,7 @@ float cpuReduce(float * h_in, int n)
     for(i = 0; i < n; i ++)
         total += (double) h_in[i];
 
-    printf("CPU---> %lfn", total);
+   // printf("CPU---> %fn", total);
     return total;
 }
 
@@ -117,19 +117,8 @@ float * gpuBackProjectMain(int * hueArray, int hueLength, float * histogram, int
 
 
 
-
-
-
-
-
-
-
-int gpuMain(int blockWidth, char p, unsigned char * hueArray, int length)
+int gpuReduceMain(int blockWidth, float * M00, int length)
 {
-  int shouldPrint = 0;
-
-  if(p == 'p')
-    shouldPrint = 1;
 
    int tile_width = blockWidth;
 
@@ -138,27 +127,16 @@ int gpuMain(int blockWidth, char p, unsigned char * hueArray, int length)
        printf("Wrong argument passed in for blockWidth!\n");
        exit(-1);
    }
-   int n = length; //size of 1D input array
-
-   if ( ! n )
-   {
-       printf("Wrong argument passed in for size of input array!\n");
-       exit(-1);
-   }
 
    // set up host memory
    float *h_in, *h_out, *d_in, *d_out;
-
-   //int sizeDout[LEVELS]; //we can have at most 5 levels of kernel launch
 
    h_out = (float *)malloc(MAXDRET * sizeof(float));
 
    memset(h_out, 0, MAXDRET * sizeof(float));
 
-   //generate input data from random generator
-   h_in = fillArray(n);
-
-   cpuReduce(h_in, n);
+    //assign input data 
+   h_in = M00;
 
    if( ! h_in || ! h_out )
    {
@@ -166,36 +144,27 @@ int gpuMain(int blockWidth, char p, unsigned char * hueArray, int length)
        exit(-1);
    }
 
-   int num_block = ceil(n / (float)tile_width);
+   int num_block = ceil(length / (float)tile_width);
    dim3 block(tile_width, 1, 1);
    dim3 grid(num_block, 1, 1);
 
    // allocate storage for the device
-   cudaMalloc((void**)&d_in, sizeof(float) * n);
+   cudaMalloc((void**)&d_in, sizeof(float) * length);
    cudaMalloc((void**)&d_out, sizeof(float) * MAXDRET);
    cudaMemset(d_out, 0, sizeof(float) * MAXDRET);
 
    // copy input to the device
-   cudaMemcpy(d_in, h_in, sizeof(float) * n, cudaMemcpyHostToDevice);
+   cudaMemcpy(d_in, h_in, sizeof(float) * length, cudaMemcpyHostToDevice);
 
    // time the kernel launches using CUDA events
    cudaEvent_t launch_begin, launch_end;
    cudaEventCreate(&launch_begin);
    cudaEventCreate(&launch_end);
 
-
-   //print out original array
-    if(shouldPrint)
-    {
-        printf("The input array is:\n");
-        printArray(h_in, n);
-
-    }
-
    //----------------------time many kernel launches and take the average time--------------------
    
    float average_simple_time = 0;
-   int num_in = n, num_out = ceil((float)n / tile_width);
+   int num_in = length, num_out = ceil((float)length / tile_width);
    int launch = 1;
 
    printf("Timing simple GPU implementation… \n");
@@ -252,8 +221,8 @@ int gpuMain(int blockWidth, char p, unsigned char * hueArray, int length)
   printf(" done! GPU time cost in second: %f\n", average_simple_time / 1000);
   printf(" done! GPU time cost in second: %f\n", time / 1000);
 
-      printf("The output array from device is:\n");
-      printArray(h_out, num_out);
+      printf("The output array from device is: %f\n", h_out[0]);
+     // printArray(h_out, num_out);
 
 
   //------------------------ now time the sequential code on CPU------------------------------
@@ -273,7 +242,7 @@ int gpuMain(int blockWidth, char p, unsigned char * hueArray, int length)
 
     // timing on CPU
     then = clock();
-    cpuTotal = cpuReduce(h_in, n);
+    cpuTotal = cpuReduce(h_in, length);
     now = clock();
 
 
@@ -291,8 +260,8 @@ int gpuMain(int blockWidth, char p, unsigned char * hueArray, int length)
   printf(" done. CPU time cost in second: %f\n", average_cpu_time);
   printf(" done. CPU time cost in second: %f\n", time);
 
-  //if (shouldPrint)
-      printf("CPU finding total is %.1f\n", cpuTotal);
+ 
+  printf("CPU finding total is %f\n", cpuTotal);
 
   //--------------------------------clean up-----------------------------------------------------
   cudaEventDestroy(launch_begin);
@@ -302,11 +271,8 @@ int gpuMain(int blockWidth, char p, unsigned char * hueArray, int length)
   cudaFree(d_in);
   cudaFree(d_out);
 
-  free(h_in);
+  //free(h_in);
   free(h_out);
-
-
-//exit(0);
 
   return 0;
 }

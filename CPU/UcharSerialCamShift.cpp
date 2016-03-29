@@ -99,7 +99,7 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
         }
         
     }
-   cout << "Inside subMeanShiftTest ---> M00 = " << M00 << " M1x " << M1x << " M1y " << M1y << "\n";
+   printf("Inside subMeanShiftTest ---> M00 = %f M1x = %f M1y = %f \n", M00, M1x, M1y);
     
    // cout << "T.O.T.A.L ---> " << total << endl;
     

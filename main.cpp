@@ -148,6 +148,7 @@ int main(int argc, const char * argv[])
     
     
     
+    /******************************************************************************************************************/
     //This is a test comparison of CPU and GPU
     int * convertedHue = (int * ) malloc(sizeof(int) * roi.getTotalPixels());
     
@@ -167,9 +168,15 @@ int main(int argc, const char * argv[])
     
     float * bp = gpuBackProjectMain(convertedHue, roi.getTotalPixels(), histogram, roi._width, xOffset, yOffset);
     
+    
+    gpuReduceMain(64, bp, roi.getTotalPixels());
+    
+    
+    
+    
     float tot = 0.0;
     
-   cout << "TOTAL PIXELS ---> " << roi.getTotalPixels() << endl;
+  cout << "TOTAL PIXELS ---> " << roi.getTotalPixels() << endl;
     
     for(int index = 0; index < roi.getTotalPixels(); index ++ )
     {
@@ -178,12 +185,13 @@ int main(int argc, const char * argv[])
     }
     
     
-    cout << "PLEASE WORK! -----> " << tot << endl;
+    printf("M00 after GPU backprojection and sequential summation -----> %f\n", tot);
     
     free(bp);
     free(convertedHue);
     //Endtest comparison of CPU and GPU
-
+    
+    /******************************************************************************************************************/
     
     
    // reverseIt(histogram);

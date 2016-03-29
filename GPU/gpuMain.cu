@@ -73,14 +73,9 @@ void reverseIt(float * histogram)
 }
 
 
-float * gpuBackProjectMain(int * hueArray, int hueLength, float * histogram)
+float * gpuBackProjectMain(int * hueArray, int hueLength, float * histogram, int width, int xOffset, int yOffset)
 {
-
-    printf("Here is hueLength: %d \n", hueArray[0]);
-
-
-
-     cudaMemcpyToSymbol(c_hist, histogram, sizeof(float) * 60);
+    cudaMemcpyToSymbol(c_hist, histogram, sizeof(float) * 60);
 
     int tile_width = 64;
     int num_block = ceil(hueLength / (float) tile_width);
@@ -108,7 +103,7 @@ float * gpuBackProjectMain(int * hueArray, int hueLength, float * histogram)
 
     //Was trying this grid, block, tile_width * sizeof(float) below
 
-    gpuBackProjectKernel<<<ceil(hueLength / (float) 64), 64>>>(d_hist, d_hueArray, d_backproj, hueLength);
+    gpuBackProjectKernel<<<ceil(hueLength / (float) 64), 64>>>(d_hist, d_hueArray,  hueLength, d_backproj, width, xOffset, yOffset);
 
     cudaMemcpy(h_backproj, d_backproj, hueLength * sizeof(float), cudaMemcpyDeviceToHost);
 

@@ -96,6 +96,8 @@ int main(int argc, const char * argv[])
     
     //end open output VideoWriter
     
+    /******************************************************************************************************************/
+    
     int i = 0;
  
     SerialCamShift camShift;
@@ -132,7 +134,7 @@ int main(int argc, const char * argv[])
     
     
      camShift.createHistogram(hueArray, roi, &histogram);
-    camShift.printHistogram(histogram, BUCKETS);
+   // camShift.printHistogram(histogram, BUCKETS);
 
      bool go = true;
 
@@ -150,16 +152,20 @@ int main(int argc, const char * argv[])
     int * convertedHue = (int * ) malloc(sizeof(int) * roi.getTotalPixels());
     
     for(int index = 0; index < roi.getTotalPixels(); index ++ )
-    {
+    { //Convert to ints for the kernel...
         convertedHue[index] = (int) hueArray[index];
     }
     
     
     
+    int xOffset = roi.getTopLeftX();
+    int yOffset = roi.getTopLeftY();
     
-        camShift.subMeanShift(hueArray, &roi, histogram, &prevX, &prevY);
     
-    float * bp = gpuBackProjectMain(convertedHue, roi.getTotalPixels(), histogram);
+    camShift.subMeanShift(hueArray, &roi, histogram, &prevX, &prevY);
+    
+    
+    float * bp = gpuBackProjectMain(convertedHue, roi.getTotalPixels(), histogram, roi._width, xOffset, yOffset);
     
     float tot = 0.0;
     

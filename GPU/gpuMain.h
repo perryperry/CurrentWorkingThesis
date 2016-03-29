@@ -19,7 +19,7 @@ float cpuReduce(float * h_in, int n);
 
 void usage();
 
-float * gpuBackProjectMain(int * hueArray, int hueLength, float * histogram);
+float * gpuBackProjectMain(int * hueArray, int hueLength, float * histogram, int width, int xOffset, int yOffset);
 
 #endif
 

@@ -18,13 +18,17 @@ __global__ void staticReverse(float *d, int n)
 }
 
 
-__global__ void gpuBackProjectKernel(float * d_hist, int * d_hueArray, float * d_backproj, int hueLength)
+__global__ void gpuBackProjectKernel(float * d_hist, int * d_hueArray, int hueArrayLength, float * d_backproj,  int width, int xOffset, int yOffset)
 {
   
   __shared__ float sharedHistogram[60];
 
   unsigned int tid = threadIdx.x;
   unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+  int col = 0;
+  int row = 0;
+  float probability = 0;
 
   if(tid < 60)
   {
@@ -33,13 +37,40 @@ __global__ void gpuBackProjectKernel(float * d_hist, int * d_hueArray, float * d
 
   __syncthreads();
 
-  if(i < hueLength)
+  if(i < hueArrayLength)
   {
-    //printf("t == %d and its hue == %d\n", t, d_hueArray[tid]);
-      d_backproj[i] = sharedHistogram[ d_hueArray[i] / 3 ];
+      col = i % width;
+      row = i / width;
+
+      probability = sharedHistogram[ d_hueArray[i] / 3 ];
+
+
+
+     // d_backproj[i] = probability; //for M00
+
+// d_backproj[i] = ((float)(col + xOffset)) * probability; //for M1x
+
+      d_backproj[i] = ((float)(row + yOffset)) * probability; //for M1y
   }
 
 }//end kernel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 __global__ void gpuSummationReduce(float *in, float *out, int n)

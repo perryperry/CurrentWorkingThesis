@@ -13,6 +13,6 @@ __global__ void staticReverse(float *d, int n);
 
 __global__ void gpuSummationReduce(float *in, float *out, int n);
 
-__global__ void gpuBackProjectKernel(float * d_hist, int * d_hueArray, float * d_backproj, int hueLength);
+__global__ void gpuBackProjectKernel(float * d_hist, int * d_hueArray, int hueArrayLength , float * d_backproj, int width, int xOffset, int yOffset);
 
 #endif

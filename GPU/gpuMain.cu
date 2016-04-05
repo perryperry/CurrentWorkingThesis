@@ -118,7 +118,7 @@ void gpuBackProjectMain(int * hueArray, int hueLength, float * histogram, int wi
 }
 
 
-int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int length)
+int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int length, int * xc, int * yc)
 {
    int tile_width = blockWidth;
 
@@ -219,6 +219,17 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
 
   printf("Done! GPU time cost in second: %f\n", time / 1000);
   printf("The output array from device is: M00 --> %f M1x --> %f M1y --> %f\n", h_M00_out[0], h_M1x_out[0], h_M1y_out[0]);
+
+
+  //Calculate centroid
+
+  if( h_M00_out[0] > 0){//Can't divide by zero...
+        
+        *xc = (int) (h_M1x_out[0] /  h_M00_out[0]);
+        *yc = (int) (h_M1y_out[0] /  h_M00_out[0]);
+        
+        printf("Inside GPU MeanShift ---> centroid (%d, %d)\n", *xc, *yc);
+    }
    
   //------------------------ now time the sequential code on CPU------------------------------
 

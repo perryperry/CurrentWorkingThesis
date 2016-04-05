@@ -28,7 +28,8 @@ public:
     int _width;
     int _height;
     RegionOfInterest(Point topR, Point botL, int fWidth, int fHeight);
-    void drawROI(Mat * frame);
+    void drawCPU_ROI(Mat * frame);
+    void drawGPU_ROI(Mat * frame);
     void setCentroid(Point centroid);
     void setROI(Point centroid, int width, int height);
     Point getTopLeft();
@@ -49,8 +50,6 @@ private:
     
     Point _topLeft;
     Point _bottomRight;
-    
-    
     int _frameWidth;
     int _frameHeight;
     Point calcBottomRight(Point centroid, int w, int h);

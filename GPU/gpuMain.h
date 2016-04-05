@@ -9,7 +9,7 @@
 
 void reverseIt(float * histogram);
 
-int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int length);
+int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int length, int * xc, int * yc);
 
 float * fillArray(int n);
 

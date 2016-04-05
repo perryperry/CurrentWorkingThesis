@@ -124,8 +124,14 @@ void RegionOfInterest::printROI()
     printf("******* FINISHED PRINTING ROI ***********\n");
 }
 
-void RegionOfInterest::drawROI(Mat * frame)
+void RegionOfInterest::drawCPU_ROI(Mat * frame)
 {
     rectangle(*frame, _topLeft, _bottomRight, Scalar( 0, 0, 255 ), THICKNESS, 8, 0);
+    circle( *frame, _centroid, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
+}
+
+void RegionOfInterest::drawGPU_ROI(Mat * frame)
+{
+    rectangle(*frame, _topLeft, _bottomRight, Scalar( 255, 0, 0 ), THICKNESS, 8, 0);
     circle( *frame, _centroid, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
 }

@@ -9,7 +9,7 @@
 
 void reverseIt(float * histogram);
 
-int gpuReduceMain(int blockWidth, float * hueArray, int length);
+int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int length);
 
 float * fillArray(int n);
 
@@ -19,7 +19,6 @@ float cpuReduce(float * h_in, int n);
 
 void usage();
 
-float * gpuBackProjectMain(int * hueArray, int hueLength, float * histogram, int width, int xOffset, int yOffset);
-
+void gpuBackProjectMain(int * hueArray, int hueLength, float * histogram, int width, int xOffset, int yOffset, float ** h_M00, float ** h_M1x, float ** h_M1y);
 #endif
 

@@ -25,6 +25,20 @@ using namespace std::chrono;
 #define OUTPUTFILENAME "out.mov"
 #define MAXTHREADS 3
 
+
+float * buildIt()
+{
+    float * array = (float *) calloc(sizeof(float), 12345678);
+
+    int i = 0;
+    
+    for(i = 0; i < 12345678; i ++)
+    {
+        array[i] = 0.17;
+    }
+    return array;
+}
+
 void parameterCheck(int argCount)
 {
     if(argCount != 3)
@@ -157,7 +171,11 @@ int main(int argc, const char * argv[])
         convertedHue[index] = (int) hueArray[index];
     }
     
+    int hueLength = roi.getTotalPixels();
     
+    float * M00 = (float *) malloc(hueLength * sizeof(float));
+    float * M1x = (float *) malloc(hueLength * sizeof(float));
+    float * M1y = (float *) malloc(hueLength * sizeof(float));
     
     int xOffset = roi.getTopLeftX();
     int yOffset = roi.getTopLeftY();
@@ -165,29 +183,31 @@ int main(int argc, const char * argv[])
     
     camShift.subMeanShift(hueArray, &roi, histogram, &prevX, &prevY);
     
+    // Histogram BackProjected array
+    gpuBackProjectMain(convertedHue, roi.getTotalPixels(), histogram, roi._width, xOffset, yOffset, &M00, &M1x ,&M1y);
     
-    float * bp = gpuBackProjectMain(convertedHue, roi.getTotalPixels(), histogram, roi._width, xOffset, yOffset);
-    
-    
-    gpuReduceMain(64, bp, roi.getTotalPixels());
-    
+   // float * bp = buildIt();
     
     
     
-    float tot = 0.0;
+    cout  << "************* Running GPU Reduction ******************\n";
+   gpuReduceMain(64, M00, M1x, M1y, roi.getTotalPixels());
+    
+    double tot = 0.0;
     
   cout << "TOTAL PIXELS ---> " << roi.getTotalPixels() << endl;
     
     for(int index = 0; index < roi.getTotalPixels(); index ++ )
     {
-     //cout << index << ")" << bp[index] << endl;
-        tot += bp[index];
+        tot += M00[index];
     }
     
+    cout << "Precision concerns: " << tot << endl;
+    printf("M00 after GPU backprojection and sequential summation -----> %lf\n", tot);
     
-    printf("M00 after GPU backprojection and sequential summation -----> %f\n", tot);
-    
-    free(bp);
+    free(M00);
+    free(M1x);
+    free(M1y);
     free(convertedHue);
     //Endtest comparison of CPU and GPU
     

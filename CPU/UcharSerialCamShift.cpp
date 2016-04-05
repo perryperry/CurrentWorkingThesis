@@ -67,7 +67,7 @@ void SerialCamShift::createHistogram(unsigned char * hueArray, RegionOfInterest 
 
 bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * roi, float * histogram, int * prevX, int * prevY)
 {
-    float M00 = 0.0, M1x = 0.0, M1y = 0.0;
+    double M00 = 0.0, M1x = 0.0, M1y = 0.0;
     int xc = 0;
     int yc = 0;
     int hue = 0;
@@ -99,7 +99,7 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
         }
         
     }
-   printf("Inside subMeanShiftTest ---> M00 = %f M1x = %f M1y = %f \n", M00, M1x, M1y);
+   printf("Inside subMeanShiftTest ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
     
    // cout << "T.O.T.A.L ---> " << total << endl;
     

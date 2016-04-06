@@ -126,7 +126,7 @@ void RegionOfInterest::printROI()
 
 void RegionOfInterest::drawCPU_ROI(Mat * frame)
 {
-    rectangle(*frame, _topLeft, _bottomRight, Scalar( 0, 0, 255 ), THICKNESS, 8, 0);
+    rectangle(*frame, _topLeft, _bottomRight, Scalar( 0, 0, 255 ), THICKNESS + 4, 8, 0);
     circle( *frame, _centroid, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
 }
 

@@ -21,7 +21,7 @@ BUILD/main.o:	main.cpp
 	g++ -c main.cpp -std=c++11 `pkg-config opencv --cflags --libs`
 	mv main.o BUILD
 clean:
-	rm BUILD/*.o gpu out.mov *.txt
+	rm BUILD/*.o gpu out.mov 
 run:
 	./gpu in.mov windows
 

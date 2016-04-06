@@ -48,20 +48,38 @@ void parameterCheck(int argCount)
     }
 }
 
-unsigned char * parseSubHueData(Mat hsvMat, RegionOfInterest roi)
+
+// This version assumes an already hsv converted matrix the size of the entire picture frame.
+// It then splits the matrix into the hue channel and gets the subframe from it.
+// But this runtime was 1.4 to 2.1 ms, and it requires the very slow hsv conversion of the entire picture frame.
+// Do not use this!
+void parseSubHueData(Mat hsvMat, RegionOfInterest roi, Mat * subframe)
 {
     std::vector<cv::Mat> hsv_channels;
     split(hsvMat, hsv_channels);
     Mat hueMatrix = hsv_channels[0];
-    Mat subframe = hueMatrix(Rect(roi.getTopLeftX(), roi.getTopLeftY(), roi._width, roi._height)).clone();
-   // cout << subframe.total() << " <----  Smaller T O T A L \n";
-   // cout << hueMatrix.total() << " <----  Larger T O T A L \n" << endl;
-    return (unsigned char *) subframe.data;
+    *subframe = hueMatrix(Rect(roi.getTopLeftX(), roi.getTopLeftY(), roi._width, roi._height)).clone();
+}
+
+
+// runtime is .4 to 1.2 ms
+// Takes the full picture frame 'frame', and first creates the subFrame, then does the hsv conversion
+// Stores the subFrame hue channel in 'subHueFrame'.
+// This avoids having to do the hsv conversion on the entire picture frame which takes 220 to 260 ms
+void convertToSubHue(Mat frame, RegionOfInterest roi, Mat * subHueFrame)
+{
+    Mat hsv;
+    Mat subFrame = frame(Rect(roi.getTopLeftX(), roi.getTopLeftY(), roi._width, roi._height)).clone();
+    cvtColor(subFrame, hsv, CV_RGB2HSV);
+    std::vector<cv::Mat> hsv_channels;
+    split(hsv, hsv_channels);
+    *subHueFrame = hsv_channels[0];
 }
 
 int main(int argc, const char * argv[])
 {
-    bool shouldCPU = false;
+    bool shouldProcessVideo = true;
+    bool shouldCPU = true;
     bool shouldGPU = true;
     bool cpu_continue = true;
     bool gpu_continue = true;
@@ -75,8 +93,10 @@ int main(int argc, const char * argv[])
     int gpu_prevX = 0;
     int gpu_prevY = 0;
     
-    high_resolution_clock::time_point t1;
-    high_resolution_clock::time_point t2;
+    high_resolution_clock::time_point time1;
+    high_resolution_clock::time_point time2;
+   // auto duration;
+    //auto gpu_duration;
     
     int blockWidth = 64;
     int numElementsInput = 555555;
@@ -127,36 +147,75 @@ int main(int argc, const char * argv[])
     SerialCamShift camShift;
     
     Mat frame, hsv;
-    
+    Mat subHueFrame;
     float * histogram = (float *) calloc(sizeof(float), BUCKETS);
 
     cap.read(frame);
     
     RegionOfInterest roi(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
     RegionOfInterest gpu_roi(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
+
+  
+   /* time1 = high_resolution_clock::now();
+    
     
     cvtColor(frame, hsv, CV_RGB2HSV);
     
+    
+    time2 = high_resolution_clock::now();
+    
+    
+    auto duration2 = duration_cast<microseconds>( time2 - time1 ).count();
+    
+    
+    cout << "Duration of preparing using entire frame: " << duration2 / 1000.0 << endl;
+
+    
+    
+    
+    
+    
+    
+    
+    
    // outputVideo.write(hsv);//just testing
     
-    t1 = high_resolution_clock::now();
+   // time1 = high_resolution_clock::now();
     
-    unsigned char * hueArray = parseSubHueData(hsv, roi);
+   
+    
+
+    
+    
+    time1 = high_resolution_clock::now();
+    parseSubHueData(hsv, gpu_roi, &subHueFrame);
+    time2 = high_resolution_clock::now();
+    duration2 = duration_cast<microseconds>( time2 - time1 ).count();
+    
+    
+    cout << "Duration of preparing using entire frame without converting to hsv: " << duration2 / 1000.0 << endl;*/
+ 
+    
+    time1 = high_resolution_clock::now();
+    
+    convertToSubHue(frame, gpu_roi, &subHueFrame);
+    
+    time2 = high_resolution_clock::now();
+   auto duration2 = duration_cast<microseconds>( time2 - time1 ).count();
+    
+    
+    cout << "Duration of preparing using subframe with converting to hsv: " << duration2 / 1000.0 << endl;
+    
+    
+    
+    
+    unsigned char * hueArray = (unsigned char * ) subHueFrame.data;
     
      camShift.createHistogram(hueArray, roi, &histogram);
    // camShift.printHistogram(histogram, BUCKETS);
 
-    
-
     /******************************************************************************************************************/
     //This is a test comparison of CPU and GPU
-    int * convertedHue = (int * ) malloc(sizeof(int) * roi.getTotalPixels());
-    
-    for(int index = 0; index < gpu_roi.getTotalPixels(); index ++ )
-    { //Convert to ints for the kernel...
-        convertedHue[index] = (int) hueArray[index];
-    }
-    
     int hueLength = gpu_roi.getTotalPixels();
     
     float * M00 = (float *) malloc(hueLength * sizeof(float));
@@ -166,96 +225,90 @@ int main(int argc, const char * argv[])
     int xOffset = gpu_roi.getTopLeftX();
     int yOffset = gpu_roi.getTopLeftY();
     
-    
     camShift.subMeanShift(hueArray, &roi, histogram, &prevX, &prevY);
     
-    // Histogram BackProjected array
-    gpuBackProjectMain(convertedHue, gpu_roi.getTotalPixels(), histogram, gpu_roi._width, xOffset, yOffset, &M00, &M1x ,&M1y);
-    
-   // float * bp = buildIt();
-    
-    cout  << "************* Running GPU Reduction ******************\n";
-   gpuReduceMain(64, M00, M1x, M1y, roi.getTotalPixels(), &gpu_xc, &gpu_yc);
+    gpuBackProjectMain(hueArray, gpu_roi.getTotalPixels(), histogram, gpu_roi._width, xOffset, yOffset, &M00, &M1x ,&M1y);
+    gpuReduceMain(64, M00, M1x, M1y, gpu_roi.getTotalPixels(), &gpu_xc, &gpu_yc);
     
     double tot = 0.0;
     
     printf("CENTROID FROM GPU: (%d, %d)\n", gpu_xc, gpu_yc);
-    
-   /* for(int index = 0; index < roi.getTotalPixels(); index ++ )
-    {
-        tot += M00[index];
-    }*/
-    
-  //  cout << "Precision concerns: " << tot << endl;
-   // printf("M00 after GPU backprojection and sequential summation -----> %lf\n", tot);
-    
-    
-    
+
     //Endtest comparison of CPU and GPU
     
     /******************************************************************************************************************/
-   // reverseIt(histogram);
-    
     printf("*****************************\n");
 
-
+    
+    
+    
+    if( shouldProcessVideo )
+    {
         int length = roi._height * roi._width;
     
         while(cap.read(frame))
         {
      
-         cvtColor(frame, hsv, CV_RGB2HSV);
+         //cvtColor(frame, hsv, CV_RGB2HSV);
         // hueArray = parseSubHueData(hsv, roi);
-         
-         //t1 = high_resolution_clock::now();
-        // t2 = high_resolution_clock::now();
-         //auto duration2 = duration_cast<microseconds>( t2 - t1 ).count();
-        
-         
-       // cout << "Duration of preparing using entire frame: " << duration2 / 1000.0 << endl;
     
+        //CPU MeanShift until Convergence
         cpu_continue = true;
-         
+            
+         time1 = high_resolution_clock::now();
          while( shouldCPU && cpu_continue )
          {
-             hueArray = parseSubHueData(hsv, roi);
+            // hueArray = parseSubHueData(hsv, roi);
+             convertToSubHue(frame, roi, &subHueFrame);
+             hueArray = (unsigned char *) subHueFrame.data;
              prevX = roi.getCenterX();
              prevY = roi.getCenterY();
              cpu_continue = camShift.subMeanShift(hueArray, &roi, histogram, &prevX, &prevY);
          }
+         time2 = high_resolution_clock::now();
+        auto cpu_duration = duration_cast<microseconds>( time2 - time1 ).count();
+            
+ 
+        //GPU MeanShift until Convergence
+        gpu_continue = true;
         
+        time1 = high_resolution_clock::now();
+        while( shouldGPU && gpu_continue )
+        {
+            // hueArray = parseSubHueData(hsv, gpu_roi);
+            convertToSubHue(frame, gpu_roi, &subHueFrame);
+            hueArray = (unsigned char *) subHueFrame.data;
+            gpu_prevX = gpu_roi.getCenterX();
+            gpu_prevY = gpu_roi.getCenterY();
+            xOffset = gpu_roi.getTopLeftX();
+            yOffset = gpu_roi.getTopLeftY();
             
-         gpu_continue = true;
+            gpuBackProjectMain(hueArray, gpu_roi.getTotalPixels(), histogram, gpu_roi._width, xOffset, yOffset, &M00, &M1x ,&M1y);
+            
+            gpuReduceMain(64, M00, M1x, M1y, gpu_roi.getTotalPixels(), &gpu_xc, &gpu_yc);
+            
+            // printf("CENTROID FROM GPU: (%d, %d)\n", gpu_xc, gpu_yc);
+            
+            gpu_roi.setCentroid(Point(gpu_xc, gpu_yc));
+            
+            if(gpu_prevX - gpu_xc < 1 && gpu_prevX - gpu_xc > -1  && gpu_prevY - gpu_yc < 1 && gpu_prevY - gpu_yc > -1)
+            {
+                gpu_continue = false;
+            }
+            
+            gpu_prevX = gpu_xc;
+            gpu_prevY = gpu_yc;
+        }
+        time2 = high_resolution_clock::now();
+        auto gpu_duration = duration_cast<microseconds>( time2 - time1 ).count();
+            
+      
+
             
             
-         while( shouldGPU && gpu_continue )
-         {
-             hueArray = parseSubHueData(hsv, gpu_roi);
-             
-             for(int index = 0; index < gpu_roi.getTotalPixels(); index ++ )
-             { //Convert to ints for the kernel...
-                 convertedHue[index] = (int) hueArray[index];
-             }
-             
-             gpu_prevX = gpu_roi.getCenterX();
-             gpu_prevY = gpu_roi.getCenterY();
-             xOffset = gpu_roi.getTopLeftX();
-             yOffset = gpu_roi.getTopLeftY();
-             
-             gpuBackProjectMain(convertedHue, gpu_roi.getTotalPixels(), histogram, gpu_roi._width, xOffset, yOffset, &M00, &M1x ,&M1y);
-         
-             gpuReduceMain(64, M00, M1x, M1y, gpu_roi.getTotalPixels(), &gpu_xc, &gpu_yc);
-              printf("CENTROID FROM GPU: (%d, %d)\n", gpu_xc, gpu_yc);
-             gpu_roi.setCentroid(Point(gpu_xc, gpu_yc));
-             
-             if(gpu_prevX - gpu_xc < 1 && gpu_prevX - gpu_xc > -1  && gpu_prevY - gpu_yc < 1 && gpu_prevY - gpu_yc > -1)
-             {
-                 gpu_continue = false;
-             }
-             
-             gpu_prevX = gpu_xc;
-             gpu_prevY = gpu_yc;
-         }
+         cout << "CPU time: " << cpu_duration / 1000.0 <<  " GPU time: " << gpu_duration / 1000.0 << endl;
+            cout << "CPU centroid (" << roi.getCenterX() << ", " << roi.getCenterY() << ") GPU centroid (" << gpu_roi.getCenterX() << ", " << gpu_roi.getCenterY() << ") " << endl;
+ 
             
         if(shouldBackProjectFrame)
             camShift.backProjectHistogram(hueArray, frame.step, &frame, roi, histogram);
@@ -271,19 +324,19 @@ int main(int argc, const char * argv[])
             
      }//end while
   
-	cout << endl << "****END OF CPU Serial MeanShift****" << endl;
- 
+        cout << endl << "**** END of MeanShift ****" << endl;
+    
+    }// end of shouldProcessVideo
 
 
     outputVideo.release();
     
-   free(histogram);
+    free(histogram);
     
     //free GPU data structures
     free(M00);
     free(M1x);
     free(M1y);
-    free(convertedHue);
     
    return 0;
 }

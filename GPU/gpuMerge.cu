@@ -18,7 +18,7 @@ __global__ void staticReverse(float *d, int n)
 }
 
 
-__global__ void gpuBackProjectKernel(float * d_hist, int * d_hueArray, int hueArrayLength, float * d_M00, float * d_M1x, float * d_M1y, int width, int xOffset, int yOffset)
+__global__ void gpuBackProjectKernel(float * d_hist, unsigned char * d_hueArray, int hueArrayLength, float * d_M00, float * d_M1x, float * d_M1y, int width, int xOffset, int yOffset)
 {
   
   __shared__ float sharedHistogram[60];
@@ -70,15 +70,14 @@ __global__ void gpuSummationReduce(float * M00_in, float * M00_out, float * M1x_
     __syncthreads();
 
     // do reduction in shared memory
-    for (unsigned int s=1; s < blockDim.x; s *= 2)
+    for (unsigned int stride = 1; stride < blockDim.x; stride *= 2)
     {
-        // modulo arithmetic is slow!
-        if (( tid % ( 2 * s )) == 0)
+        if (( tid % ( 2 * stride )) == 0)
         {
              //bigger number stored in low index
-           shared_M00[tid] += shared_M00[tid + s];
-           shared_M1x[tid] += shared_M1x[tid + s];
-           shared_M1y[tid] += shared_M1y[tid + s];
+           shared_M00[tid] += shared_M00[tid + stride ];
+           shared_M1x[tid] += shared_M1x[tid + stride ];
+           shared_M1y[tid] += shared_M1y[tid + stride ];
         }
 
         __syncthreads();
@@ -92,3 +91,18 @@ __global__ void gpuSummationReduce(float * M00_in, float * M00_out, float * M1x_
       M1y_out[blockIdx.x] = shared_M1y[0];
     }
 }
+
+
+
+__global__ void bpTestKernel(unsigned char * d_hueArray, int * d_converted, int hueArrayLength)
+{
+  unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+  __syncthreads();
+
+  if(i < hueArrayLength)
+  {
+    d_converted[i] = (int) d_hueArray[i];
+  }
+
+}//end kernel

@@ -17,8 +17,11 @@ void printArray(float *arr, int n);
 
 float cpuReduce(float * h_in, int n);
 
-void usage();
+void gpuBackProjectMain(unsigned char * hueArray, int hueLength, float * histogram, int width, int xOffset, int yOffset, float ** h_M00, float ** h_M1x, float ** h_M1y);
 
-void gpuBackProjectMain(int * hueArray, int hueLength, float * histogram, int width, int xOffset, int yOffset, float ** h_M00, float ** h_M1x, float ** h_M1y);
+
+void bpTest(unsigned char * hueArray, int ** convertArray, int hueLength);
+
+
 #endif
 

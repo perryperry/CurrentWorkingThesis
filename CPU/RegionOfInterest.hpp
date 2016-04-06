@@ -21,7 +21,7 @@
 using namespace cv;
 using namespace std;
 
-#define THICKNESS 3
+#define THICKNESS 2
 
 class RegionOfInterest{
 public:

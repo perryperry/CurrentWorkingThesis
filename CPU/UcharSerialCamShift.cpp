@@ -98,7 +98,7 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
         }
         
     }
-   printf("Inside CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
+  // printf("Inside CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
     
     if(M00 > 0){//Can't divide by zero...
         
@@ -106,7 +106,7 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
         yc = (int) (M1y / M00);
         (*roi).setCentroid(Point(xc, yc));
         
-        printf("Inside CPU MeanShift ---> centroid (%d, %d)\n", xc, yc);
+      //  printf("Inside CPU MeanShift ---> centroid (%d, %d)\n", xc, yc);
     }
 
     if(*prevX - xc < 1 && *prevX - xc > -1  && *prevY - yc < 1 && *prevY - yc > -1)

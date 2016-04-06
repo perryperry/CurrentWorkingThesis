@@ -42,12 +42,6 @@ float cpuReduce(float * h_in, int n)
     return total;
 }
 
-void usage()
-{
-   printf("Usage: ./progName blockWidth numElementsInput p \n");
-}
-
-
 void reverseIt(float * histogram)
 {
 	const int n = 60;
@@ -73,10 +67,8 @@ void reverseIt(float * histogram)
 }
 
 //Backprojects M00, M1x, M1y as double pointers, in preparation for reduce summation kernel
-void gpuBackProjectMain(int * hueArray, int hueLength, float * histogram, int width, int xOffset, int yOffset, float ** h_M00, float ** h_M1x, float ** h_M1y)
+void gpuBackProjectMain(unsigned char * hueArray, int hueLength, float * histogram, int width, int xOffset, int yOffset, float ** h_M00, float ** h_M1x, float ** h_M1y)
 {
-    cudaMemcpyToSymbol(c_hist, histogram, sizeof(float) * 60);
-
     int tile_width = 64;
     int num_block = ceil(hueLength / (float) tile_width);
     dim3 block(tile_width, 1, 1);
@@ -84,31 +76,63 @@ void gpuBackProjectMain(int * hueArray, int hueLength, float * histogram, int wi
 
     const int histogramLength = 60;
     float *d_hist;
-    cudaMalloc(&d_hist, histogramLength * sizeof(float)); 
-    cudaMemcpy(d_hist, histogram, histogramLength * sizeof(float), cudaMemcpyHostToDevice);
+    cudaError_t err = cudaMalloc((void **)&d_hist, histogramLength * sizeof(float)); 
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
 
-    int * d_hueArray;
-    cudaMalloc(&d_hueArray, hueLength * sizeof(int)); 
-    cudaMemcpy(d_hueArray, hueArray, hueLength * sizeof(int), cudaMemcpyHostToDevice);
+   err = cudaMemcpy(d_hist, histogram, histogramLength * sizeof(float), cudaMemcpyHostToDevice);
+   if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+
+    unsigned char * d_hueArray;
+    err = cudaMalloc((void **)&d_hueArray, hueLength * sizeof(unsigned char)); 
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+
+
+    err = cudaMemcpy(d_hueArray, hueArray, hueLength * sizeof(unsigned char), cudaMemcpyHostToDevice);
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
 
     float * d_M00; //device back projected histogram
     float * d_M1x;
     float * d_M1y;
 
-    cudaMalloc(&d_M00, hueLength * sizeof(float)); 
-    cudaMemset(d_M00, 0, sizeof(float) * hueLength);
-    cudaMalloc(&d_M1x, hueLength * sizeof(float)); 
-    cudaMemset(d_M1x, 0, sizeof(float) * hueLength);
-    cudaMalloc(&d_M1y, hueLength * sizeof(float)); 
-    cudaMemset(d_M1y, 0, sizeof(float) * hueLength);
+    err = cudaMalloc((void **)&d_M00, hueLength * sizeof(float)); 
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
 
-    //Was trying this grid, block, tile_width * sizeof(float) below
+    err = cudaMalloc((void **)&d_M1x, hueLength * sizeof(float)); 
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
 
+    err = cudaMalloc((void **)&d_M1y, hueLength * sizeof(float)); 
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+    
     gpuBackProjectKernel<<<ceil(hueLength / (float) 64), 64>>>(d_hist, d_hueArray, hueLength, d_M00, d_M1x, d_M1y, width, xOffset, yOffset);
 
-    cudaMemcpy(*h_M00, d_M00, hueLength * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(*h_M1x, d_M1x, hueLength * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(*h_M1y, d_M1y, hueLength * sizeof(float), cudaMemcpyDeviceToHost);
+    err = cudaMemcpy(*h_M00, d_M00, hueLength * sizeof(float), cudaMemcpyDeviceToHost);
+
+    if(err != cudaSuccess)
+    {
+        printf("%s\n", cudaGetErrorString(err));
+    }
+
+   err = cudaMemcpy(*h_M1x, d_M1x, hueLength * sizeof(float), cudaMemcpyDeviceToHost);
+
+   if(err != cudaSuccess)
+   {
+        printf("%s\n", cudaGetErrorString(err));
+   }
+
+  err =  cudaMemcpy(*h_M1y, d_M1y, hueLength * sizeof(float), cudaMemcpyDeviceToHost);
+
+
+   if(err != cudaSuccess)
+   {
+        printf("%s\n", cudaGetErrorString(err));
+   }
 
     cudaFree(d_hist);
     cudaFree(d_hueArray);
@@ -127,13 +151,13 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
    float *h_M1y_out, *d_M1y_in, *d_M1y_out;
 
    // set up host memory
-   h_M00_out = (float *) malloc(MAXDRET * sizeof(float));
-   h_M1x_out = (float *) malloc(MAXDRET * sizeof(float));
-   h_M1y_out = (float *) malloc(MAXDRET * sizeof(float));
+   h_M00_out = (float *) malloc(length * sizeof(float)); //MAXDRET
+   h_M1x_out = (float *) malloc(length * sizeof(float)); //MAXDRET
+   h_M1y_out = (float *) malloc(length * sizeof(float)); //MAXDRET
 
-   memset(h_M00_out, 0, MAXDRET * sizeof(float));
-   memset(h_M1x_out, 0, MAXDRET * sizeof(float));
-   memset(h_M1y_out, 0, MAXDRET * sizeof(float));
+  // memset(h_M00_out, 0, length * sizeof(float)); //MAXDRET
+  // memset(h_M1x_out, 0, length * sizeof(float)); //MAXDRET
+   //memset(h_M1y_out, 0, length * sizeof(float)); //MAXDRET
 
    int num_block = ceil(length / (float)tile_width);
    dim3 block(tile_width, 1, 1);
@@ -141,16 +165,16 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
 
    // allocate storage for the device
    cudaMalloc((void**)&d_M00_in, sizeof(float) * length);
-   cudaMalloc((void**)&d_M00_out, sizeof(float) * MAXDRET);
-   cudaMemset(d_M00_out, 0, sizeof(float) * MAXDRET);
+   cudaMalloc((void**)&d_M00_out, sizeof(float) * length ); //MAXDRET
+   //cudaMemset(d_M00_out, 0, sizeof(float) * length ); //MAXDRET
 
    cudaMalloc((void**)&d_M1x_in, sizeof(float) * length);
-   cudaMalloc((void**)&d_M1x_out, sizeof(float) * MAXDRET);
-   cudaMemset(d_M1x_out, 0, sizeof(float) * MAXDRET);
+   cudaMalloc((void**)&d_M1x_out, sizeof(float) * length); //MAXDRET
+  // cudaMemset(d_M1x_out, 0, sizeof(float) * length); //MAXDRET
 
    cudaMalloc((void**)&d_M1y_in, sizeof(float) * length);
-   cudaMalloc((void**)&d_M1y_out, sizeof(float) * MAXDRET);
-   cudaMemset(d_M1y_out, 0, sizeof(float) * MAXDRET);
+   cudaMalloc((void**)&d_M1y_out, sizeof(float) * length); //MAXDRET
+  // cudaMemset(d_M1y_out, 0, sizeof(float) * length); //MAXDRET
 
    // copy input to the device
    cudaMemcpy(d_M00_in, M00, sizeof(float) * length, cudaMemcpyHostToDevice);
@@ -158,9 +182,9 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
    cudaMemcpy(d_M1y_in, M1y, sizeof(float) * length, cudaMemcpyHostToDevice);
 
    // time the kernel launches using CUDA events
-   cudaEvent_t launch_begin, launch_end;
-   cudaEventCreate(&launch_begin);
-   cudaEventCreate(&launch_end);
+   //cudaEvent_t launch_begin, launch_end;
+   //cudaEventCreate(&launch_begin);
+   //cudaEventCreate(&launch_end);
 
    //----------------------time many kernel launches and take the average time--------------------
    
@@ -168,7 +192,7 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
    int launch = 1;
 
    // record a CUDA event immediately before and after the kernel launch
-   cudaEventRecord(launch_begin,0);
+  // cudaEventRecord(launch_begin,0);
 
    while( 1 )
    {
@@ -210,15 +234,15 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
        launch ++;
    }//end of while
 
-  cudaEventRecord(launch_end,0);
-  cudaEventSynchronize(launch_end);
+  //cudaEventRecord(launch_end,0);
+  //cudaEventSynchronize(launch_end);
 
   // measure the time spent in the kernel
   float time = 0;
-  cudaEventElapsedTime(&time, launch_begin, launch_end);
+  //cudaEventElapsedTime(&time, launch_begin, launch_end);
 
-  printf("Done! GPU time cost in second: %f\n", time / 1000);
-  printf("The output array from device is: M00 --> %f M1x --> %f M1y --> %f\n", h_M00_out[0], h_M1x_out[0], h_M1y_out[0]);
+ // printf("Done! GPU time cost in second: %f\n", time / 1000);
+ // printf("From GPU: M00 --> %f M1x --> %f M1y --> %f\n", h_M00_out[0], h_M1x_out[0], h_M1y_out[0]);
 
 
   //Calculate centroid
@@ -228,10 +252,14 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
         *xc = (int) (h_M1x_out[0] /  h_M00_out[0]);
         *yc = (int) (h_M1y_out[0] /  h_M00_out[0]);
         
-        printf("Inside GPU MeanShift ---> centroid (%d, %d)\n", *xc, *yc);
+      //  printf("Inside GPU MeanShift ---> centroid (%d, %d)\n", *xc, *yc);
     }
    
   //------------------------ now time the sequential code on CPU------------------------------
+
+/*
+
+
 
   clock_t now, then;
   float cpuTotal = 0;
@@ -247,9 +275,12 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
   printf(" done. CPU time cost in second: %f\n", time);
   printf("CPU finding total is %f\n", cpuTotal);
 
+
+  */
+
   //--------------------------------clean up-----------------------------------------------------
-  cudaEventDestroy(launch_begin);
-  cudaEventDestroy(launch_end);
+ // cudaEventDestroy(launch_begin);
+ // cudaEventDestroy(launch_end);
 
   // deallocate device memory
   cudaFree(d_M00_in);
@@ -265,4 +296,100 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
 
   return 0;
 }
+
+
+//Backprojects M00, M1x, M1y as double pointers, in preparation for reduce summation kernel
+void bpTest(unsigned char * hueArray, int ** convertedArray, int hueLength)
+{
+	  int index = 40499;
+    int s = sizeof(unsigned char);
+    printf("Size of unsigned char == %d, hueLength == %d\n", s, hueLength);
+
+    int tile_width = 64;
+    int num_block = ceil(hueLength / (float) tile_width);
+    dim3 block(tile_width, 1, 1);
+    dim3 grid(num_block, 1, 1);
+
+    unsigned char * d_hueArray;
+
+    printf("Checking hueArray--> %d\n", hueArray[index]);
+
+    cudaError_t err = cudaMalloc((void **) &d_hueArray, hueLength * sizeof(unsigned char)); 
+
+    printf("Checking hueArray--> %d\n", hueArray[index]);
+    
+    if(err != cudaSuccess)
+    {
+        printf("%s\n", cudaGetErrorString(err));
+    }
+
+    printf("Checking hueArray--> %d\n", hueArray[index]);
+
+    cudaMemcpy(d_hueArray, hueArray, hueLength * sizeof(unsigned char), cudaMemcpyHostToDevice);
+
+    printf("Checking hueArray--> %d\n", hueArray[index]);
+
+    int * d_converted;
+
+    cudaMalloc((void **)&d_converted, hueLength * sizeof(int)); 
+   //  cudaMemset(d_converted, 0, sizeof(int) * hueLength);
+
+   bpTestKernel<<<ceil(hueLength / (float) 64), 64>>>(d_hueArray, d_converted, hueLength);
+
+   cudaMemcpy(*convertedArray, d_converted, hueLength * sizeof(int), cudaMemcpyDeviceToHost);
+    
+   //	cudaMemcpy(hueArray, d_hueArray, hueLength * sizeof(unsigned char), cudaMemcpyDeviceToHost);
+
+
+   cudaFree(d_converted);
+    cudaFree(d_hueArray);
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

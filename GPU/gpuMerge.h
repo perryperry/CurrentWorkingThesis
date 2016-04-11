@@ -1,13 +1,11 @@
 #ifndef GPUMERGE_H
 #define GPUMERGE_H
-
 #include <stdio.h>
 #include <stdlib.h>
 
-
 #define SHARED_SIZE_LIMIT 1024
 
-__constant__ float c_hist[60];
+__constant__ float const_histogram[60];
 
 __global__ void staticReverse(float *d, int n);
 
@@ -16,5 +14,16 @@ __global__ void gpuSummationReduce(float * M00_in, float * M00_out, float * M1x_
 __global__ void gpuBackProjectKernel(float * d_hist, unsigned char * d_hueArray, int hueArrayLength , float * d_M00, float * d_M1x, float * d_M1y, int width, int xOffset, int yOffset);
 
 __global__ void bpTestKernel(unsigned char * d_hueArray, int * d_converted, int hueArrayLength);
+
+__global__ void gpuMeanShiftKernelForSubFrame(unsigned char * g_idata, float *g_odata, int * readyArray, int input_length, int blockCount,int width, int xOffset, int yOffset);
+
+//__device__ void warpReduce(volatile float* sdata, int tid);
+
+__device__ void warpReduce(volatile float* shared_M00, volatile float* shared_M1x, volatile float* shared_M1y, int tid);
+
+void setConstantMemoryHistogram(float * histogram);
+
+
+
 
 #endif

@@ -1,9 +1,9 @@
 
 #include "timing.c"
+#include "gpuMain.h"
 #include "gpuMerge.h"
 
 #define LEVELS 5
-#define MAXDRET 102400
 #define THRESH 2
 
 float * fillArray(int n)
@@ -37,7 +37,6 @@ float cpuReduce(float * h_in, int n)
 
     for(i = 0; i < n; i ++)
         total += (double) h_in[i];
-
    // printf("CPU---> %fn", total);
     return total;
 }
@@ -182,9 +181,9 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
    cudaMemcpy(d_M1y_in, M1y, sizeof(float) * length, cudaMemcpyHostToDevice);
 
    // time the kernel launches using CUDA events
-   //cudaEvent_t launch_begin, launch_end;
-   //cudaEventCreate(&launch_begin);
-   //cudaEventCreate(&launch_end);
+   cudaEvent_t launch_begin, launch_end;
+   cudaEventCreate(&launch_begin);
+   cudaEventCreate(&launch_end);
 
    //----------------------time many kernel launches and take the average time--------------------
    
@@ -192,7 +191,7 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
    int launch = 1;
 
    // record a CUDA event immediately before and after the kernel launch
-  // cudaEventRecord(launch_begin,0);
+  cudaEventRecord(launch_begin,0);
 
    while( 1 )
    {
@@ -234,14 +233,14 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
        launch ++;
    }//end of while
 
-  //cudaEventRecord(launch_end,0);
-  //cudaEventSynchronize(launch_end);
+  cudaEventRecord(launch_end,0);
+  cudaEventSynchronize(launch_end);
 
   // measure the time spent in the kernel
   float time = 0;
-  //cudaEventElapsedTime(&time, launch_begin, launch_end);
+  cudaEventElapsedTime(&time, launch_begin, launch_end);
 
- // printf("Done! GPU time cost in second: %f\n", time / 1000);
+ printf("Done! GPU time cost in second: %f\n", time );
  // printf("From GPU: M00 --> %f M1x --> %f M1y --> %f\n", h_M00_out[0], h_M1x_out[0], h_M1y_out[0]);
 
 
@@ -254,10 +253,10 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
         
       //  printf("Inside GPU MeanShift ---> centroid (%d, %d)\n", *xc, *yc);
     }
-   
+   printf("**********THIS BETTER BE SO! M00 = %f M1x = %f M1y = %f **************\n", h_M00_out[0], h_M1x_out[0], h_M1y_out[0]);
   //------------------------ now time the sequential code on CPU------------------------------
 
-/*
+
 
 
 
@@ -272,15 +271,15 @@ int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int len
   // measure the time spent on CPU
   time = timeCost(then, now);
 
-  printf(" done. CPU time cost in second: %f\n", time);
+  printf(" done. CPU time cost in second: %f\n", time * 1000);
   printf("CPU finding total is %f\n", cpuTotal);
 
 
-  */
+
 
   //--------------------------------clean up-----------------------------------------------------
- // cudaEventDestroy(launch_begin);
- // cudaEventDestroy(launch_end);
+ cudaEventDestroy(launch_begin);
+ cudaEventDestroy(launch_end);
 
   // deallocate device memory
   cudaFree(d_M00_in);
@@ -347,17 +346,89 @@ void bpTest(unsigned char * hueArray, int ** convertedArray, int hueLength)
 }
 
 
+//***********************************************************************************************//
+// Below launches new improved kernel stuff
+
+void mainConstantMemoryHistogramLoad(float * histogram)
+{
+  setConstantMemoryHistogram(histogram);
+}
+
+int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLength, int width, int xOffset, int yOffset, int * cx, int * cy)
+{
+  printf("\nInside Launching GPU MeanShift...\n");
+
+ 
+   unsigned char * d_in;
+
+    cudaError_t err = cudaMalloc((void **)&d_in, hueFrameLength * sizeof(unsigned char)); 
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+
+    err = cudaMemcpy(d_in, hueFrame, hueFrameLength * sizeof(unsigned char), cudaMemcpyHostToDevice);
+
+    cudaEvent_t launch_begin, launch_end;
+    int tile_width = 1024;
+    int num_block = ceil( (float) hueFrameLength / (float) tile_width);
+    dim3 block(tile_width, 1, 1);
+    dim3 grid(num_block, 1, 1);
+
+    //Make d_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
+    float * d_out;
+    err = cudaMalloc((void **)&d_out, 3 * num_block * sizeof(float)); 
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+
+      int * readyArray;
+    err = cudaMalloc((void **)&readyArray, num_block * sizeof(int)); 
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+      cudaMemset(readyArray, 0, sizeof(int) * num_block ); 
+
+    //Make h_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
+    float * h_out = (float *) malloc(3 * num_block * sizeof(float));
+
+  //  printf("Num_block: %d vs tile_width %d\n", num_block, tile_width);
 
 
+    if(num_block <= tile_width){
+
+     cudaEventCreate(&launch_begin);
+     cudaEventCreate(&launch_end);
+
+     cudaEventRecord(launch_begin,0);
+
+    gpuMeanShiftKernelForSubFrame<<< grid, block >>>(d_in, d_out, readyArray, hueFrameLength, num_block, width, xOffset, yOffset);
+      
+
+    err =  cudaMemcpy(h_out, d_out, 3 * num_block * sizeof(float), cudaMemcpyDeviceToHost);
 
 
+     cudaEventRecord(launch_end,0);
+    cudaEventSynchronize(launch_end);
+
+    float time = 0;
+    cudaEventElapsedTime(&time, launch_begin, launch_end);
+
+    printf("GPU time cost in milliseconds for improved meanshift kernel with atomic add: %f\n", time);
+    printf("improved meanshift kernel with atomic add total: M00 = %f M1x = %f M1y = %f \n", h_out[0], h_out[num_block], h_out[num_block * 2]);
+
+    //cpuReduce(h_out, num_block);
+
+   //  printArray(h_out, num_block);
+
+  }
+  else
+    printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", num_block, tile_width);
 
 
+    cudaFree(d_out);
+    cudaFree(readyArray);
+    free(h_out);
+    cudaFree(d_in);
 
-
-
-
-
+    return 1;
+}
 
 
 

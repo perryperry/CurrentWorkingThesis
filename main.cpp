@@ -13,6 +13,7 @@
 #include "opencv2/core/core.hpp"
 
 #include "GPU/gpuMain.h"
+
 #include "CPU/RegionOfInterest.hpp"
 #include "CPU/UcharSerialCamShift.hpp"
 
@@ -78,7 +79,10 @@ void convertToSubHue(Mat frame, RegionOfInterest roi, Mat * subHueFrame)
 
 int main(int argc, const char * argv[])
 {
-    bool shouldProcessVideo = true;
+    high_resolution_clock::time_point time1;
+    high_resolution_clock::time_point time2;
+    
+    bool shouldProcessVideo = false;
     bool shouldCPU = true;
     bool shouldGPU = true;
     bool cpu_continue = true;
@@ -93,8 +97,7 @@ int main(int argc, const char * argv[])
     int gpu_prevX = 0;
     int gpu_prevY = 0;
     
-    high_resolution_clock::time_point time1;
-    high_resolution_clock::time_point time2;
+  
    // auto duration;
     //auto gpu_duration;
     
@@ -151,6 +154,12 @@ int main(int argc, const char * argv[])
     float * histogram = (float *) calloc(sizeof(float), BUCKETS);
 
     cap.read(frame);
+
+	Mat testIt;
+ cvtColor(frame, testIt, CV_RGB2HSV);
+
+
+	printf("\n **************** Lets see how many: %d \n", (int)testIt.total());
     
     RegionOfInterest roi(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
     RegionOfInterest gpu_roi(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
@@ -242,6 +251,50 @@ int main(int argc, const char * argv[])
     
     
     
+    /******************************************************************************************************************/
+    
+    //Testing new and improved kernel
+    
+    int testX = 0, testY = 0;
+    
+  //  camShift.printHistogram(histogram, BUCKETS);
+
+    
+    
+    
+    
+    mainConstantMemoryHistogramLoad(histogram);
+
+  launchMeanShiftKernelForSubFrame(hueArray, gpu_roi.getTotalPixels(), gpu_roi._width, xOffset, yOffset, &testX, &testY);
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    /******************************************************************************************************************/
+    
+    
+    
     if( shouldProcessVideo )
     {
         int length = roi._height * roi._width;
@@ -306,8 +359,8 @@ int main(int argc, const char * argv[])
 
             
             
-         cout << "CPU time: " << cpu_duration / 1000.0 <<  " GPU time: " << gpu_duration / 1000.0 << endl;
-            cout << "CPU centroid (" << roi.getCenterX() << ", " << roi.getCenterY() << ") GPU centroid (" << gpu_roi.getCenterX() << ", " << gpu_roi.getCenterY() << ") " << endl;
+      //   cout << "CPU time: " << cpu_duration / 1000.0 <<  " GPU time: " << gpu_duration / 1000.0 << endl;
+         //   cout << "CPU centroid (" << roi.getCenterX() << ", " << roi.getCenterY() << ") GPU centroid (" << gpu_roi.getCenterX() << ", " << gpu_roi.getCenterY() << ") " << endl;
  
             
         if(shouldBackProjectFrame)

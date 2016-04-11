@@ -7,6 +7,8 @@
 #include <float.h>
 #include <math.h>
 
+//#include "gpuReductionKernels.h"
+
 void reverseIt(float * histogram);
 
 int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int length, int * xc, int * yc);
@@ -22,6 +24,9 @@ void gpuBackProjectMain(unsigned char * hueArray, int hueLength, float * histogr
 
 void bpTest(unsigned char * hueArray, int ** convertArray, int hueLength);
 
+void mainConstantMemoryHistogramLoad(float * histogram);
+
+int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLength, int width, int xOffset, int yOffset, int * cx, int * cy);
 
 #endif
 

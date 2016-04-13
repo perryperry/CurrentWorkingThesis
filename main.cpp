@@ -206,14 +206,29 @@ int main(int argc, const char * argv[])
     int xOffset = gpu_roi.getTopLeftX();
     int yOffset = gpu_roi.getTopLeftY();
     
-    camShift.subMeanShift(hueArray, &roi, histogram, &prevX, &prevY);
+    while( shouldCPU && cpu_continue )
+    {
+        // hueArray = parseSubHueData(hsv, roi);
+        convertToSubHue(frame, roi, &subHueFrame);
+        hueArray = (unsigned char *) subHueFrame.data;
+        prevX = roi.getCenterX();
+        prevY = roi.getCenterY();
+        cpu_continue = camShift.subMeanShift(hueArray, &roi, histogram, &prevX, &prevY);
+    }
+    
+    
+    
+    
+    
+    
+    
     
    // gpuBackProjectMain(hueArray, gpu_roi.getTotalPixels(), histogram, gpu_roi._width, xOffset, yOffset, &M00, &M1x ,&M1y);
    // gpuReduceMain(64, M00, M1x, M1y, gpu_roi.getTotalPixels(), &gpu_xc, &gpu_yc);
     
     double tot = 0.0;
     
-    printf("CENTROID FROM GPU: (%d, %d)\n", gpu_xc, gpu_yc);
+   // printf("CENTROID FROM GPU: (%d, %d)\n", gpu_xc, gpu_yc);
 
     //Endtest comparison of CPU and GPU
     
@@ -227,7 +242,7 @@ int main(int argc, const char * argv[])
     
     //Testing new and improved kernel
     
-    int testX = 0, testY = 0;
+    int testX = gpu_roi.getCenterX(), testY = gpu_roi.getCenterY();
     
   //  camShift.printHistogram(histogram, BUCKETS);
 
@@ -257,7 +272,7 @@ int main(int argc, const char * argv[])
     printf("Total pixels: %d, Total sub-pixels: %d, Abs-width: %d, Sub-width: %d, XOffset: %d, YOffset: %d\n", totalHue, gpu_roi.getTotalPixels(), hueMatrix.cols, gpu_roi._width, xOffset, yOffset);
     
     
-   launchMeanShiftKernelForEntireFrame(entireHueArray, totalHue, gpu_roi.getTotalPixels(), hueMatrix.cols, gpu_roi._width, yOffset, xOffset, &testX, &testY);
+   launchMeanShiftKernelForEntireFrame(entireHueArray, totalHue, gpu_roi.getTotalPixels(), hueMatrix.cols, gpu_roi._width, gpu_roi._height, yOffset, xOffset, &testX, &testY);
 
    //launchMeanShiftKernelForSubFrame(entireHueArray, totalHue, testIt.rows, 0, 0, &testX, &testY);
     

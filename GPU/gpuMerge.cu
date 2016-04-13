@@ -264,11 +264,11 @@ So given the thread id (i.e. the sub_absolute_index), you can get those values a
 absolute index in the overall picture frame char *. 
 */
 
-__global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *g_odata, int * readyArray, int subframe_length, int blockCount, int abs_width, int sub_width, int row_offset, int col_offset)
+__global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *g_odata, int * readyArray, int subframe_length, int blockCount, int abs_width, int sub_width, int sub_height, int row_offset, int col_offset, int cx, int cy)
 {
   __shared__ float shared_M00[1024];
- // __shared__ float shared_M1x[1024];
-  //__shared__ float shared_M1y[1024];
+  __shared__ float shared_M1x[1024];
+  __shared__ float shared_M1y[1024];
 
   // each thread loads one element from global to shared mem
   unsigned int tid = threadIdx.x;
@@ -285,39 +285,39 @@ __global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *
       absolute_index = (row_offset * abs_width) + col_offset + sub_col + (abs_width * sub_row);
       
       shared_M00[tid] = const_histogram[ g_idata[absolute_index] / 3 ];
-      //shared_M1x[tid] = ((float)(sub_col + col_offset)) * shared_M00[tid];
-     // shared_M1y[tid] = ((float)(sub_row + row_offset)) * shared_M00[tid];
+      shared_M1x[tid] = ((float)(sub_col + col_offset)) * shared_M00[tid];
+      shared_M1y[tid] = ((float)(sub_row + row_offset)) * shared_M00[tid];
   }
   else
   {
       shared_M00[tid] = 0;
-     // shared_M1x[tid] = 0;
-     // shared_M1y[tid] = 0;
+      shared_M1x[tid] = 0;
+      shared_M1y[tid] = 0;
   }
 
     __syncthreads();
 
-    for (unsigned int s=blockDim.x/2; s > 32; s >>= 1) 
+    for (unsigned int s = blockDim.x / 2; s > 32; s >>= 1) 
     { 
       if (tid < s)
       {
         shared_M00[tid] += shared_M00[tid + s]; 
-       // shared_M1x[tid] += shared_M1x[tid + s]; 
-       // shared_M1y[tid] += shared_M1y[tid + s]; 
+        shared_M1x[tid] += shared_M1x[tid + s]; 
+        shared_M1y[tid] += shared_M1y[tid + s]; 
       }
       __syncthreads(); 
     }
 
     if(tid < 32){
-     //  warpReduce(shared_M00, shared_M1x, shared_M1y, tid);
-       warpReduceSingleMatrix(shared_M00, tid);
+       warpReduce(shared_M00, shared_M1x, shared_M1y, tid);
+       //warpReduceSingleMatrix(shared_M00, tid);
     }
 
     // write result for this block to global mem
     if (tid == 0) {
       g_odata[blockIdx.x] = shared_M00[0]; 
-     // g_odata[blockIdx.x + blockCount] = shared_M1x[0]; 
-     // g_odata[blockIdx.x + (2 * blockCount)] = shared_M1y[0]; 
+      g_odata[blockIdx.x + blockCount] = shared_M1x[0]; 
+      g_odata[blockIdx.x + (2 * blockCount)] = shared_M1y[0]; 
 
       readyArray[blockIdx.x] = 1;
     }
@@ -325,32 +325,38 @@ __global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *
     if( blockIdx.x == 0 && tid < blockCount ) // summation of global out across blocks
     {
       int index = 0;
- //     int M1yOffset = 2 * blockCount;
+      int M1yOffset = 2 * blockCount;
 
       while(atomicAdd(&readyArray[tid], 0) == 0);
 
       shared_M00[tid] = g_odata[tid];
-     // shared_M1x[tid] = g_odata[tid + blockCount];
-     // shared_M1y[tid] = g_odata[tid + M1yOffset];
+      shared_M1x[tid] = g_odata[tid + blockCount];
+      shared_M1y[tid] = g_odata[tid + M1yOffset];
 
       __syncthreads(); 
 
       if(tid == 0)
       {
         float M00 = 0.0;
-      //  float M1x = 0.0;
-       // float M1y = 0.0;
+        float M1x = 0.0;
+        float M1y = 0.0;
+
+        int newX = 0;
+        int newY = 0;
 
         for(index = 0; index < blockCount; index ++)
         {
           M00 += shared_M00[index];
-        //  M1x += shared_M1x[index];
-         // M1y += shared_M1y[index];
+          M1x += shared_M1x[index];
+          M1y += shared_M1y[index];
         }
 
         g_odata[0] = M00;
-       // g_odata[blockCount] = M1x;
-       // g_odata[M1yOffset] = M1y;
+        g_odata[blockCount] = M1x;
+        g_odata[M1yOffset] = M1y;
+        newX = M1x / M00;
+        newY = M1y / M00;
+        printf("New x: %d New y: %d vs Old x: %d Old y: %d\n", newX, newY, cx, cy);
       }
     }
 }

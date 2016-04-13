@@ -436,10 +436,10 @@ int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLengt
 
 //Haven't started this yet... 
 
-int launchMeanShiftKernelForEntireFrame(unsigned char * hueFrame, int hueFrameLength, int hueSubFrameLength, int abs_width, int sub_width, int row_offset, int col_offset, int * cx, int * cy)
+int launchMeanShiftKernelForEntireFrame(unsigned char * hueFrame, int hueFrameLength, int hueSubFrameLength, int abs_width, int sub_width, int sub_height, int row_offset, int col_offset, int * cx, int * cy)
 {
-  printf("\nInside Launching GPU MeanShift for entire frame...\n");
-   unsigned char * d_in;
+    printf("\nInside Launching GPU MeanShift for entire frame...\n");
+    unsigned char * d_in;
 
     cudaError_t err = cudaMalloc((void **)&d_in, hueFrameLength * sizeof(unsigned char)); 
     if(err != cudaSuccess)
@@ -478,25 +478,19 @@ int launchMeanShiftKernelForEntireFrame(unsigned char * hueFrame, int hueFrameLe
 
      cudaEventRecord(launch_begin,0);
 
-    gpuMeanShiftKernelForEntireFrame<<< grid, block >>>(d_in, d_out, readyArray, hueSubFrameLength, num_block, abs_width, sub_width, row_offset, col_offset);
+    gpuMeanShiftKernelForEntireFrame<<< grid, block >>>(d_in, d_out, readyArray, hueSubFrameLength, num_block, abs_width, sub_width, sub_height, row_offset, col_offset, *cx, *cy);
       
-
     err =  cudaMemcpy(h_out, d_out, 3 * num_block * sizeof(float), cudaMemcpyDeviceToHost);
 
-
-     cudaEventRecord(launch_end,0);
+    cudaEventRecord(launch_end,0);
     cudaEventSynchronize(launch_end);
 
     float time = 0;
     cudaEventElapsedTime(&time, launch_begin, launch_end);
 
     printf("GPU time cost in milliseconds for improved meanshift kernel with atomic add for entire frame: %f\n", time);
-    printf("Entire frame meanshift kernel with atomic add total: M00 = %f \n", h_out[0]);
-    // printf("Entire frame meanshift kernel with atomic add total: M00 = %f M1x = %f M1y = %f \n", h_out[0], h_out[num_block], h_out[num_block * 2]);
-    //cpuReduce(h_out, num_block);
-
-   //  printArray(h_out, num_block);
-
+   // printf("Entire frame meanshift kernel with atomic add total: M00 = %f \n", h_out[0]);
+    printf("Entire frame meanshift kernel with atomic add total: M00 = %f M1x = %f M1y = %f \n", h_out[0], h_out[num_block], h_out[num_block * 2]);
   }
   else
     printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", num_block, tile_width);

@@ -17,9 +17,13 @@ __global__ void bpTestKernel(unsigned char * d_hueArray, int * d_converted, int 
 
 __global__ void gpuMeanShiftKernelForSubFrame(unsigned char * g_idata, float *g_odata, int * readyArray, int input_length, int blockCount,int width, int xOffset, int yOffset);
 
+__global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *g_odata, int * readyArray, int subframe_length, int blockCount, int abs_width, int sub_width, int row_offset, int col_offset);
+
 //__device__ void warpReduce(volatile float* sdata, int tid);
 
 __device__ void warpReduce(volatile float* shared_M00, volatile float* shared_M1x, volatile float* shared_M1y, int tid);
+
+__device__ void warpReduceSingleMatrix(volatile float* sdata, int tid) ;
 
 void setConstantMemoryHistogram(float * histogram);
 

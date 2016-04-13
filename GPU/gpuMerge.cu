@@ -209,7 +209,7 @@ __global__ void gpuMeanShiftKernelForSubFrame(unsigned char *g_idata, float *g_o
     }
 }
 
-/*__device__ void warpReduce(volatile float* sdata, int tid) 
+__device__ void warpReduceSingleMatrix(volatile float* sdata, int tid) 
 { 
   sdata[tid] += sdata[tid + 32];
   sdata[tid] += sdata[tid + 16]; 
@@ -217,7 +217,7 @@ __global__ void gpuMeanShiftKernelForSubFrame(unsigned char *g_idata, float *g_o
   sdata[tid] += sdata[tid + 4]; 
   sdata[tid] += sdata[tid + 2]; 
   sdata[tid] += sdata[tid + 1];
-}*/
+}
 
 __device__ void warpReduce(volatile float* shared_M00, volatile float* shared_M1x, volatile float* shared_M1y, int tid) 
 { 
@@ -246,11 +246,114 @@ __device__ void warpReduce(volatile float* shared_M00, volatile float* shared_M1
 
 void setConstantMemoryHistogram(float * histogram)
 {
+    cudaDeviceReset();
     cudaMemcpyToSymbol(const_histogram, histogram, sizeof(float) * 60);
 }
 
 
 
+//Kernel for meanshift of sub-window based on entire Frame
+
+/*
+Finding sub-matrix index in greater matrix:
+
+( row_offset * absolute_matrix_width ) + col_offset + sub_col + ( absolute_matrix_width * sub_row ) == absolute_index
+
+The reduce kernel you have has the calculation to get sub_col and sub_row based on sub_width and sub_absolute_index.
+So given the thread id (i.e. the sub_absolute_index), you can get those values and plug them in to the above for the 
+absolute index in the overall picture frame char *. 
+*/
+
+__global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *g_odata, int * readyArray, int subframe_length, int blockCount, int abs_width, int sub_width, int row_offset, int col_offset)
+{
+  __shared__ float shared_M00[1024];
+ // __shared__ float shared_M1x[1024];
+  //__shared__ float shared_M1y[1024];
+
+  // each thread loads one element from global to shared mem
+  unsigned int tid = threadIdx.x;
+  unsigned int i = blockIdx.x*blockDim.x + threadIdx.x; 
+  unsigned int sub_col = 0;
+  unsigned int sub_row = 0;
+  unsigned int absolute_index = 0;
+
+  if(i < subframe_length) 
+  {
+      sub_col = i % sub_width;
+      sub_row = i / sub_width;
+
+      absolute_index = (row_offset * abs_width) + col_offset + sub_col + (abs_width * sub_row);
+      
+      shared_M00[tid] = const_histogram[ g_idata[absolute_index] / 3 ];
+      //shared_M1x[tid] = ((float)(sub_col + col_offset)) * shared_M00[tid];
+     // shared_M1y[tid] = ((float)(sub_row + row_offset)) * shared_M00[tid];
+  }
+  else
+  {
+      shared_M00[tid] = 0;
+     // shared_M1x[tid] = 0;
+     // shared_M1y[tid] = 0;
+  }
+
+    __syncthreads();
+
+    for (unsigned int s=blockDim.x/2; s > 32; s >>= 1) 
+    { 
+      if (tid < s)
+      {
+        shared_M00[tid] += shared_M00[tid + s]; 
+       // shared_M1x[tid] += shared_M1x[tid + s]; 
+       // shared_M1y[tid] += shared_M1y[tid + s]; 
+      }
+      __syncthreads(); 
+    }
+
+    if(tid < 32){
+     //  warpReduce(shared_M00, shared_M1x, shared_M1y, tid);
+       warpReduceSingleMatrix(shared_M00, tid);
+    }
+
+    // write result for this block to global mem
+    if (tid == 0) {
+      g_odata[blockIdx.x] = shared_M00[0]; 
+     // g_odata[blockIdx.x + blockCount] = shared_M1x[0]; 
+     // g_odata[blockIdx.x + (2 * blockCount)] = shared_M1y[0]; 
+
+      readyArray[blockIdx.x] = 1;
+    }
+
+    if( blockIdx.x == 0 && tid < blockCount ) // summation of global out across blocks
+    {
+      int index = 0;
+ //     int M1yOffset = 2 * blockCount;
+
+      while(atomicAdd(&readyArray[tid], 0) == 0);
+
+      shared_M00[tid] = g_odata[tid];
+     // shared_M1x[tid] = g_odata[tid + blockCount];
+     // shared_M1y[tid] = g_odata[tid + M1yOffset];
+
+      __syncthreads(); 
+
+      if(tid == 0)
+      {
+        float M00 = 0.0;
+      //  float M1x = 0.0;
+       // float M1y = 0.0;
+
+        for(index = 0; index < blockCount; index ++)
+        {
+          M00 += shared_M00[index];
+        //  M1x += shared_M1x[index];
+         // M1y += shared_M1y[index];
+        }
+
+        g_odata[0] = M00;
+       // g_odata[blockCount] = M1x;
+       // g_odata[M1yOffset] = M1y;
+      }
+    }
+}
 
 
 

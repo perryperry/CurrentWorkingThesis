@@ -155,47 +155,19 @@ int main(int argc, const char * argv[])
 
     cap.read(frame);
 
-	Mat testIt;
- cvtColor(frame, testIt, CV_RGB2HSV);
 
-
-	printf("\n **************** Lets see how many: %d \n", (int)testIt.total());
     
     RegionOfInterest roi(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
     RegionOfInterest gpu_roi(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
 
   
    /* time1 = high_resolution_clock::now();
-    
-    
     cvtColor(frame, hsv, CV_RGB2HSV);
-    
-    
     time2 = high_resolution_clock::now();
-    
-    
     auto duration2 = duration_cast<microseconds>( time2 - time1 ).count();
-    
-    
     cout << "Duration of preparing using entire frame: " << duration2 / 1000.0 << endl;
-
-    
-    
-    
-    
-    
-    
-    
-    
    // outputVideo.write(hsv);//just testing
-    
    // time1 = high_resolution_clock::now();
-    
-   
-    
-
-    
-    
     time1 = high_resolution_clock::now();
     parseSubHueData(hsv, gpu_roi, &subHueFrame);
     time2 = high_resolution_clock::now();
@@ -236,8 +208,8 @@ int main(int argc, const char * argv[])
     
     camShift.subMeanShift(hueArray, &roi, histogram, &prevX, &prevY);
     
-    gpuBackProjectMain(hueArray, gpu_roi.getTotalPixels(), histogram, gpu_roi._width, xOffset, yOffset, &M00, &M1x ,&M1y);
-    gpuReduceMain(64, M00, M1x, M1y, gpu_roi.getTotalPixels(), &gpu_xc, &gpu_yc);
+   // gpuBackProjectMain(hueArray, gpu_roi.getTotalPixels(), histogram, gpu_roi._width, xOffset, yOffset, &M00, &M1x ,&M1y);
+   // gpuReduceMain(64, M00, M1x, M1y, gpu_roi.getTotalPixels(), &gpu_xc, &gpu_yc);
     
     double tot = 0.0;
     
@@ -259,13 +231,38 @@ int main(int argc, const char * argv[])
     
   //  camShift.printHistogram(histogram, BUCKETS);
 
+    cout << "sub frame total: " << subHueFrame.total() << endl;
     
+    int testTotal = gpu_roi._width * gpu_roi._height;
     
-    
+    cout << "sub frame total: " << testTotal << endl;
     
     mainConstantMemoryHistogramLoad(histogram);
 
-  launchMeanShiftKernelForSubFrame(hueArray, gpu_roi.getTotalPixels(), gpu_roi._width, xOffset, yOffset, &testX, &testY);
+ // launchMeanShiftKernelForSubFrame(hueArray, gpu_roi.getTotalPixels(), gpu_roi._width, xOffset, yOffset, &testX, &testY);
+
+
+    Mat testIt;
+    cvtColor(frame, testIt, CV_RGB2HSV);
+    printf("\n **************** Lets see how many: %d, abs_width: %d or this width?: %d\n", (int)testIt.total(), size.width, testIt.cols);
+    std::vector<cv::Mat> hsv_channels;
+    split(testIt, hsv_channels);
+    Mat hueMatrix = hsv_channels[0];
+    
+    
+     unsigned char * entireHueArray = (unsigned char * ) hueMatrix.data;
+      int totalHue = (int)hueMatrix.total();
+
+    
+    printf("Total pixels: %d, Total sub-pixels: %d, Abs-width: %d, Sub-width: %d, XOffset: %d, YOffset: %d\n", totalHue, gpu_roi.getTotalPixels(), hueMatrix.cols, gpu_roi._width, xOffset, yOffset);
+    
+    
+   launchMeanShiftKernelForEntireFrame(entireHueArray, totalHue, gpu_roi.getTotalPixels(), hueMatrix.cols, gpu_roi._width, yOffset, xOffset, &testX, &testY);
+
+   //launchMeanShiftKernelForSubFrame(entireHueArray, totalHue, testIt.rows, 0, 0, &testX, &testY);
+    
+
+    cout <<"\n\n\n\n*******************************TEST****************************\n\n\n";
     
     
     
@@ -273,20 +270,24 @@ int main(int argc, const char * argv[])
     
     
     
+    int ind = 0;
+    double tttt = 0;
+    
+    for(ind = 0; ind < 60; ind ++)
+    {
+    //    printf("%d) %f\n", ind, histogram[ind]);//entireHueArray[ind]);
+
+    }
+    
+   for(ind = 0; ind < totalHue; ind ++)
+    {
+     //   printf("%d) %d\n", ind, entireHueArray[ind]);
+        tttt += (double) histogram[entireHueArray[ind] / 3];
+    }
     
     
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    printf("Does this look right?: %lf\n", tttt);
     
     
     

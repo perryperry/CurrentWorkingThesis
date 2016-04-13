@@ -349,6 +349,8 @@ void bpTest(unsigned char * hueArray, int ** convertedArray, int hueLength)
 //***********************************************************************************************//
 // Below launches new improved kernel stuff
 
+
+//wrapper function because constant memory must be in the same file that accesses it, linking issue
 void mainConstantMemoryHistogramLoad(float * histogram)
 {
   setConstantMemoryHistogram(histogram);
@@ -388,7 +390,7 @@ int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLengt
     //Make h_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
     float * h_out = (float *) malloc(3 * num_block * sizeof(float));
 
-  //  printf("Num_block: %d vs tile_width %d\n", num_block, tile_width);
+  printf("Num_block: %d vs tile_width %d\n", num_block, tile_width);
 
 
     if(num_block <= tile_width){
@@ -431,6 +433,82 @@ int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLengt
 }
 
 
+
+//Haven't started this yet... 
+
+int launchMeanShiftKernelForEntireFrame(unsigned char * hueFrame, int hueFrameLength, int hueSubFrameLength, int abs_width, int sub_width, int row_offset, int col_offset, int * cx, int * cy)
+{
+  printf("\nInside Launching GPU MeanShift for entire frame...\n");
+   unsigned char * d_in;
+
+    cudaError_t err = cudaMalloc((void **)&d_in, hueFrameLength * sizeof(unsigned char)); 
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+
+    err = cudaMemcpy(d_in, hueFrame, hueFrameLength * sizeof(unsigned char), cudaMemcpyHostToDevice);
+
+    cudaEvent_t launch_begin, launch_end;
+    int tile_width = 1024;
+    int num_block = ceil( (float) hueSubFrameLength / (float) tile_width);
+    dim3 block(tile_width, 1, 1);
+    dim3 grid(num_block, 1, 1);
+
+    //Make d_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
+    float * d_out;
+    err = cudaMalloc((void **)&d_out, 3 * num_block * sizeof(float)); 
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+
+      int * readyArray;
+    err = cudaMalloc((void **)&readyArray, num_block * sizeof(int)); 
+    if(err != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+      cudaMemset(readyArray, 0, sizeof(int) * num_block ); 
+
+    //Make h_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
+    float * h_out = (float *) malloc(3 * num_block * sizeof(float));
+
+    printf("Num_block: %d vs tile_width %d\n", num_block, tile_width);
+
+
+    if(num_block <= tile_width){
+
+     cudaEventCreate(&launch_begin);
+     cudaEventCreate(&launch_end);
+
+     cudaEventRecord(launch_begin,0);
+
+    gpuMeanShiftKernelForEntireFrame<<< grid, block >>>(d_in, d_out, readyArray, hueSubFrameLength, num_block, abs_width, sub_width, row_offset, col_offset);
+      
+
+    err =  cudaMemcpy(h_out, d_out, 3 * num_block * sizeof(float), cudaMemcpyDeviceToHost);
+
+
+     cudaEventRecord(launch_end,0);
+    cudaEventSynchronize(launch_end);
+
+    float time = 0;
+    cudaEventElapsedTime(&time, launch_begin, launch_end);
+
+    printf("GPU time cost in milliseconds for improved meanshift kernel with atomic add for entire frame: %f\n", time);
+    printf("Entire frame meanshift kernel with atomic add total: M00 = %f \n", h_out[0]);
+    // printf("Entire frame meanshift kernel with atomic add total: M00 = %f M1x = %f M1y = %f \n", h_out[0], h_out[num_block], h_out[num_block * 2]);
+    //cpuReduce(h_out, num_block);
+
+   //  printArray(h_out, num_block);
+
+  }
+  else
+    printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", num_block, tile_width);
+
+
+    cudaFree(d_out);
+    cudaFree(readyArray);
+    free(h_out);
+    cudaFree(d_in);
+
+    return 1;
+}
 
 
 

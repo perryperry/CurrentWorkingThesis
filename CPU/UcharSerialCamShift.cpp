@@ -98,7 +98,7 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
         }
         
     }
-  // printf("Inside CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
+  printf("Inside CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
     
     if(M00 > 0){//Can't divide by zero...
         

@@ -28,5 +28,7 @@ void mainConstantMemoryHistogramLoad(float * histogram);
 
 int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLength, int width, int xOffset, int yOffset, int * cx, int * cy);
 
+int launchMeanShiftKernelForEntireFrame(unsigned char * hueFrame, int hueFrameLength,  int hueSubFrameLength, int abs_width, int sub_width, int xOffset, int yOffset, int * cx, int * cy);
+
 #endif
 

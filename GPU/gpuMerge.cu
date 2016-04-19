@@ -264,7 +264,7 @@ So given the thread id (i.e. the sub_absolute_index), you can get those values a
 absolute index in the overall picture frame char *. 
 */
 
-__global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *g_odata, int * readyArray, int subframe_length, int blockCount, int abs_width, int sub_width, int sub_height, int row_offset, int col_offset, int cx, int cy)
+__global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *g_odata, int subframe_length, int blockCount, int abs_width, int sub_width, int sub_height, int * row_offset, int * col_offset, int * cxy)
 {
   __shared__ float shared_M00[1024];
   __shared__ float shared_M1x[1024];
@@ -282,11 +282,11 @@ __global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *
       sub_col = i % sub_width;
       sub_row = i / sub_width;
 
-      absolute_index = (row_offset * abs_width) + col_offset + sub_col + (abs_width * sub_row);
+      absolute_index = (row_offset[0] * abs_width) + col_offset[0] + sub_col + (abs_width * sub_row);
       
       shared_M00[tid] = const_histogram[ g_idata[absolute_index] / 3 ];
-      shared_M1x[tid] = ((float)(sub_col + col_offset)) * shared_M00[tid];
-      shared_M1y[tid] = ((float)(sub_row + row_offset)) * shared_M00[tid];
+      shared_M1x[tid] = ((float)(sub_col + col_offset[0])) * shared_M00[tid];
+      shared_M1y[tid] = ((float)(sub_row + row_offset[0])) * shared_M00[tid];
   }
   else
   {
@@ -310,59 +310,60 @@ __global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *
 
     if(tid < 32){
        warpReduce(shared_M00, shared_M1x, shared_M1y, tid);
-       //warpReduceSingleMatrix(shared_M00, tid);
     }
-
+     __syncthreads();
     // write result for this block to global mem
     if (tid == 0) {
       g_odata[blockIdx.x] = shared_M00[0]; 
       g_odata[blockIdx.x + blockCount] = shared_M1x[0]; 
       g_odata[blockIdx.x + (2 * blockCount)] = shared_M1y[0]; 
-
-      readyArray[blockIdx.x] = 1;
-    }
-
-    if( blockIdx.x == 0 && tid < blockCount ) // summation of global out across blocks
-    {
-      int index = 0;
-      int M1yOffset = 2 * blockCount;
-
-      while(atomicAdd(&readyArray[tid], 0) == 0);
-
-      shared_M00[tid] = g_odata[tid];
-      shared_M1x[tid] = g_odata[tid + blockCount];
-      shared_M1y[tid] = g_odata[tid + M1yOffset];
-
-      __syncthreads(); 
-
-      if(tid == 0)
-      {
-        float M00 = 0.0;
-        float M1x = 0.0;
-        float M1y = 0.0;
-
-        int newX = 0;
-        int newY = 0;
-
-        for(index = 0; index < blockCount; index ++)
-        {
-          M00 += shared_M00[index];
-          M1x += shared_M1x[index];
-          M1y += shared_M1y[index];
-        }
-
-        g_odata[0] = M00;
-        g_odata[blockCount] = M1x;
-        g_odata[M1yOffset] = M1y;
-        newX = M1x / M00;
-        newY = M1y / M00;
-        printf("New x: %d New y: %d vs Old x: %d Old y: %d\n", newX, newY, cx, cy);
-      }
     }
 }
 
 
+__global__ void gpuFinalReduce(float * g_odata, int * cxy, int * row_offset, int * col_offset, int sub_width, int sub_height, int num_block)
+{
+    extern __shared__ float shared_sum[];
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x*blockDim.x + threadIdx.x; 
 
+    if(i < num_block){
+
+      shared_sum[i] = g_odata[i];
+      shared_sum[i + num_block] = g_odata[i + num_block];
+      shared_sum[i + num_block + num_block] = g_odata[i + num_block + num_block];
+
+    }
+    __syncthreads();
+
+    if(i == 0)
+    {
+      int ind = 0;
+      float M00 = 0.0;
+      float M1x = 0.0;
+      float M1y = 0.0;
+      int newX = 0;
+      int newY = 0;
+
+      for(ind = 0; ind < num_block; ind ++)
+      {
+          M00 += shared_sum[ind];
+          M1x += shared_sum[ind + num_block];
+          M1y += shared_sum[ind + num_block + num_block];
+      }
+      newX = M1x / M00;
+      newY = M1y / M00;
+
+      col_offset[0] = newX - (sub_width / 2);
+      row_offset[0] = newY - (sub_height / 2);
+      if(col_offset[0] < 0) col_offset[0] = 0;
+      if(row_offset[0] < 0) row_offset[0] = 0;
+
+      cxy[0] = newX;
+      cxy[1] = newY;
+      //printf("\n\n\n\nMOO in gpuFinalReduce: M00:%f M1x:%f M1y: %f\n", M00, M1x, M1y);
+    }
+}
 
 
 

@@ -27,7 +27,7 @@ void RegionOfInterest::setCentroid(Point centroid)
 {
     _centroid = centroid;
     _topLeft = calcTopLeft(centroid, _width, _height);
-    _bottomRight = calcBottomRight(centroid, _width, _height);
+    _bottomRight = calcBottomRight(_topLeft, _width, _height);
 }
 
 void RegionOfInterest::setROI(Point centroid, int width, int height)
@@ -36,7 +36,7 @@ void RegionOfInterest::setROI(Point centroid, int width, int height)
     _width =  width;
     _height =  height;
     _topLeft = calcTopLeft(centroid, width, height);
-    _bottomRight = calcBottomRight(centroid, width, height);
+    _bottomRight = calcBottomRight(_topLeft, width, height);
 }
 
 Point RegionOfInterest::calcCentroid(Point topLeft, int w, int h)
@@ -60,10 +60,10 @@ Point RegionOfInterest::calcTopLeft(Point centroid, int ww, int wh)
     
 }
 
-Point RegionOfInterest::calcBottomRight(Point centroid, int ww, int wh)
+Point RegionOfInterest::calcBottomRight(Point topLeft, int ww, int wh)
 {
-    int bottomRight_x = centroid.x + (ww / 2);
-    int bottomRight_y = centroid.y + (wh / 2);
+    int bottomRight_x = topLeft.x + ww;
+    int bottomRight_y = topLeft.y + wh;
     if(bottomRight_x > _frameWidth - 1) bottomRight_x = _frameWidth- 1;
     if(bottomRight_y > _frameHeight - 1) bottomRight_y = _frameHeight -1;
     

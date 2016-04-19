@@ -517,7 +517,7 @@ int launchMeanShiftKernelForEntireFrame(unsigned char * hueFrame, int hueFrameLe
     printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", num_block, tile_width);
 
     *cx = h_cxy[0];
-    *cy = h_cxy[0];
+    *cy = h_cxy[1];
 
     cudaFree(d_out);
     free(h_out);

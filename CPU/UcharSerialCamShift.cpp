@@ -146,9 +146,9 @@ void SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, Region
         prevX = (*roi).getCenterX();
         prevY = (*roi).getCenterY();
         
-        for(int col = (*roi).getTopLeftX(); col < (*roi).getTopLeftX() + (*roi)._width; col ++)
+        for(int col = (*roi).getTopLeftX(); col < (*roi).getBottomRightX();col++)// (*roi).getTopLeftX() + (*roi)._width; col ++)
         {
-            for(int row = (*roi).getTopLeftY(); row < (*roi).getTopLeftY() + (*roi)._height; row++)
+            for(int row = (*roi).getTopLeftY(); row < (*roi).getBottomRightY();row++)//(*roi).getTopLeftY() + (*roi)._height; row++)
             {
                 hue = hueArray[ step * row + col ];
                 probability = histogram[hue / BUCKET_WIDTH];

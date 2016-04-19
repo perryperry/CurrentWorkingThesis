@@ -52,7 +52,7 @@ private:
     Point _bottomRight;
     int _frameWidth;
     int _frameHeight;
-    Point calcBottomRight(Point centroid, int w, int h);
+    Point calcBottomRight(Point topLeft, int w, int h);
     Point calcTopLeft(Point centroid, int ww, int wh);
     Point calcCentroid(Point topLeft, int w, int h);
     

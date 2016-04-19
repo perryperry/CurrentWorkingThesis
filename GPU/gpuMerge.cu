@@ -324,7 +324,7 @@ __global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *
 __global__ void gpuFinalReduce(float * g_odata, int * cxy, int * row_offset, int * col_offset, int sub_width, int sub_height, int num_block)
 {
     extern __shared__ float shared_sum[];
-    unsigned int tid = threadIdx.x;
+    //unsigned int tid = threadIdx.x;
     unsigned int i = blockIdx.x*blockDim.x + threadIdx.x; 
 
     if(i < num_block){

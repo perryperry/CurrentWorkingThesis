@@ -68,8 +68,8 @@ void SerialCamShift::createHistogram(unsigned char * hueArray, RegionOfInterest 
 
 bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * roi, float * histogram, int * prevX, int * prevY)
 {
-    FILE * pFileTXT;
-    pFileTXT = fopen ("sub.txt","a");
+  //  FILE * pFileTXT;
+   // pFileTXT = fopen ("sub.txt","a");
     
     double M00 = 0.0, M1x = 0.0, M1y = 0.0;
     int xc = 0;
@@ -93,21 +93,21 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
             M1x += ((float)(col + xOffset)) * probability;
             M1y += ((float)(row + yOffset)) * probability;
             
-             fprintf (pFileTXT, "%d\n", hue);
+            // fprintf (pFileTXT, "%d\n", hue);
             
          //   cout << "HUE AT (" << row + xOffset << ", " << col + yOffset << ") is " << hue << endl;
         }
          //printf("NEW--> %d %d %d %d\n", hue, (int)M00, (int)M1x,(int) M1y);
     }
-  printf("Inside CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
-     fclose (pFileTXT);
+ // printf("Inside CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
+   //  fclose (pFileTXT);
     if(M00 > 0){//Can't divide by zero...
         
         xc = (int) (M1x / M00);
         yc = (int) (M1y / M00);
         (*roi).setCentroid(Point(xc, yc));
         
-      printf("Inside CPU MeanShift ---> centroid (%d, %d)  topX, topY (%d,%d)\n", xc, yc, (*roi).getTopLeftX(), (*roi).getTopLeftY());
+     // printf("Inside CPU MeanShift ---> centroid (%d, %d)  topX, topY (%d,%d)\n", xc, yc, (*roi).getTopLeftX(), (*roi).getTopLeftY());
     }
 
     if(*prevX - xc < 1 && *prevX - xc > -1  && *prevY - yc < 1 && *prevY - yc > -1)
@@ -126,8 +126,8 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
 
 void SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, RegionOfInterest * roi, float * histogram)
 {
-    FILE * pFileTXT;
-    pFileTXT = fopen ("entire.txt","a");
+   // FILE * pFileTXT;
+  ///  pFileTXT = fopen ("entire.txt","a");
 
     Point topLeft = (*roi).getTopLeft();
     Point bottomRight = (*roi).getBottomRight();
@@ -155,17 +155,17 @@ void SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, Region
                 M00 += probability;
                 M1x += ((float)col) * probability;
                 M1y += ((float)row) * probability;
-                  fprintf (pFileTXT, "%d\n", hue);
+                 // fprintf (pFileTXT, "%d\n", hue);
             }
              //printf("OTHER NEW--> %d %d %d %d\n", hue, (int)M00, (int)M1x,(int) M1y);
         }
-          printf("Inside Entire Frame CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
+        //  printf("Inside Entire Frame CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
         if(M00 > 0){//Can't divide by zero...
             
             xc = (int)(M1x / M00);
             yc = (int)(M1y / M00);
             (*roi).setCentroid(Point(xc, yc));
-            printf("Inside Entire Frame CPU MeanShift ---> centroid (%d, %d)  topX, topY (%d,%d)\n", xc, yc, (*roi).getTopLeftX(), (*roi).getTopLeftY());
+           // printf("Inside Entire Frame CPU MeanShift ---> centroid (%d, %d)  topX, topY (%d,%d)\n", xc, yc, (*roi).getTopLeftX(), (*roi).getTopLeftY());
         }
         
         if(prevX - xc < 1 && prevX - xc > -1  && prevY - yc < 1 && prevY - yc > -1)
@@ -181,6 +181,6 @@ void SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, Region
         
     }//end of converging
     
-    fclose (pFileTXT);
+   // fclose (pFileTXT);
     
 }

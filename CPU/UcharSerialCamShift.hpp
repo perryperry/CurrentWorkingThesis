@@ -29,6 +29,8 @@ public:
     void printHistogram(float * histogram, int length);
     
     void backProjectHistogram(unsigned char * hsv, int step, Mat * frame, RegionOfInterest roi, float * histogram);
+    
+    void cpu_entireFrameMeanShift(uchar * hueArray, int step, RegionOfInterest * roi, float * histogram);
 };
 
 #endif /* SerialCamShift_hpp */

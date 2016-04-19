@@ -5,7 +5,8 @@
 //  Created by Matthew Perry on 1/28/16.
 //  Copyright © 2016 Matthew Perry. All rights reserved.
 //
-
+#include <fstream>
+#include <iostream>
 #include "UcharSerialCamShift.hpp"
 
 void SerialCamShift::backProjectHistogram(unsigned char * hsv, int step, Mat * frame, RegionOfInterest roi, float * histogram)
@@ -67,6 +68,9 @@ void SerialCamShift::createHistogram(unsigned char * hueArray, RegionOfInterest 
 
 bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * roi, float * histogram, int * prevX, int * prevY)
 {
+    FILE * pFileTXT;
+    pFileTXT = fopen ("sub.txt","a");
+    
     double M00 = 0.0, M1x = 0.0, M1y = 0.0;
     int xc = 0;
     int yc = 0;
@@ -77,29 +81,26 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
     int width = (*roi)._width;
     int height = (*roi)._height;
     int count = 0;
- 
-    count ++;
-    int total  = 0;
     
     for(int row = 0; row < height; row ++)
     {
         for(int col = 0; col < width; col++)
         {
             hue = hueArray[ width * row + col ];
-            total += hue;
-            
             probability = histogram[hue / BUCKET_WIDTH];
             M00 += probability;
             
             M1x += ((float)(col + xOffset)) * probability;
             M1y += ((float)(row + yOffset)) * probability;
             
+             fprintf (pFileTXT, "%d\n", hue);
+            
          //   cout << "HUE AT (" << row + xOffset << ", " << col + yOffset << ") is " << hue << endl;
         }
-        
+         //printf("NEW--> %d %d %d %d\n", hue, (int)M00, (int)M1x,(int) M1y);
     }
   printf("Inside CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
-    
+     fclose (pFileTXT);
     if(M00 > 0){//Can't divide by zero...
         
         xc = (int) (M1x / M00);
@@ -121,4 +122,65 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
         *prevY = yc;
         return true;
     }
+}
+
+void SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, RegionOfInterest * roi, float * histogram)
+{
+    FILE * pFileTXT;
+    pFileTXT = fopen ("entire.txt","a");
+
+    Point topLeft = (*roi).getTopLeft();
+    Point bottomRight = (*roi).getBottomRight();
+    double M00 = 0.0, M1x = 0.0, M1y = 0.0;
+    int xc = 0;
+    int yc = 0;
+    int hue = 0;
+    float probability = 0.0;
+    bool converging = true;
+    
+    int prevX = 0;
+    int prevY = 0;
+    
+    while(converging)
+    {
+        prevX = (*roi).getCenterX();
+        prevY = (*roi).getCenterY();
+        
+        for(int col = (*roi).getTopLeftX(); col < (*roi).getTopLeftX() + (*roi)._width; col ++)
+        {
+            for(int row = (*roi).getTopLeftY(); row < (*roi).getTopLeftY() + (*roi)._height; row++)
+            {
+                hue = hueArray[ step * row + col ];
+                probability = histogram[hue / BUCKET_WIDTH];
+                M00 += probability;
+                M1x += ((float)col) * probability;
+                M1y += ((float)row) * probability;
+                  fprintf (pFileTXT, "%d\n", hue);
+            }
+             //printf("OTHER NEW--> %d %d %d %d\n", hue, (int)M00, (int)M1x,(int) M1y);
+        }
+          printf("Inside Entire Frame CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
+        if(M00 > 0){//Can't divide by zero...
+            
+            xc = (int)(M1x / M00);
+            yc = (int)(M1y / M00);
+            (*roi).setCentroid(Point(xc, yc));
+            printf("Inside Entire Frame CPU MeanShift ---> centroid (%d, %d)  topX, topY (%d,%d)\n", xc, yc, (*roi).getTopLeftX(), (*roi).getTopLeftY());
+        }
+        
+        if(prevX - xc < 1 && prevX - xc > -1  && prevY - yc < 1 && prevY - yc > -1)
+            converging = false;
+        else
+        {
+            prevX = xc;
+            prevY = yc;
+        }
+        M00 = 0.0;
+        M1x = 0.0;
+        M1y = 0.0;
+        
+    }//end of converging
+    
+    fclose (pFileTXT);
+    
 }

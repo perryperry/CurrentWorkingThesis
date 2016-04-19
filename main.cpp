@@ -159,7 +159,7 @@ int main(int argc, const char * argv[])
     
     RegionOfInterest roi(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
     RegionOfInterest gpu_roi(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
-
+     RegionOfInterest test_roi(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
   
    /* time1 = high_resolution_clock::now();
     cvtColor(frame, hsv, CV_RGB2HSV);
@@ -206,7 +206,7 @@ int main(int argc, const char * argv[])
     int xOffset = gpu_roi.getTopLeftX();
     int yOffset = gpu_roi.getTopLeftY();
     
-    while( shouldCPU && cpu_continue )
+   while( shouldCPU && cpu_continue )
     {
         // hueArray = parseSubHueData(hsv, roi);
         convertToSubHue(frame, roi, &subHueFrame);
@@ -267,6 +267,10 @@ int main(int argc, const char * argv[])
     col_offset[0] = xOffset;
     
     printf("\n\nin main: %d, %d and %d, %d\n\n", row_offset[0], col_offset[0], yOffset, xOffset);
+    
+    
+  camShift.cpu_entireFrameMeanShift(entireHueArray, hueMatrix.step, &test_roi, histogram);
+    
     
   launchMeanShiftKernelForEntireFrame(entireHueArray, totalHue, gpu_roi.getTotalPixels(), hueMatrix.cols, gpu_roi._width, gpu_roi._height, row_offset, col_offset, &testX, &testY);
 

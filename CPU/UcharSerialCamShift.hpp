@@ -13,7 +13,10 @@
 #include <iostream>
 #include <fstream>
 #include "RegionOfInterest.hpp"
-
+#include <ctime>
+#include <ratio>
+#include <chrono>
+using namespace std::chrono;
 #define BUCKET_WIDTH 3
 #define BUCKETS 60
 
@@ -30,7 +33,7 @@ public:
     
     void backProjectHistogram(unsigned char * hsv, int step, Mat * frame, RegionOfInterest roi, float * histogram);
     
-    void cpu_entireFrameMeanShift(uchar * hueArray, int step, RegionOfInterest * roi, float * histogram);
+    float cpu_entireFrameMeanShift(uchar * hueArray, int step, RegionOfInterest * roi, float * histogram);
 };
 
 #endif /* SerialCamShift_hpp */

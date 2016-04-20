@@ -246,7 +246,6 @@ __device__ void warpReduce(volatile float* shared_M00, volatile float* shared_M1
 
 void setConstantMemoryHistogram(float * histogram)
 {
-    cudaDeviceReset();
     cudaMemcpyToSymbol(const_histogram, histogram, sizeof(float) * 60);
 }
 

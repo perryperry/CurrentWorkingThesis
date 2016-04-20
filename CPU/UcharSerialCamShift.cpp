@@ -124,14 +124,13 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
     }
 }
 
-void SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, RegionOfInterest * roi, float * histogram)
+float SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, RegionOfInterest * roi, float * histogram)
 {
    // FILE * pFileTXT;
   ///  pFileTXT = fopen ("entire.txt","a");
-
-    Point topLeft = (*roi).getTopLeft();
-    Point bottomRight = (*roi).getBottomRight();
-    double M00 = 0.0, M1x = 0.0, M1y = 0.0;
+    high_resolution_clock::time_point time1;
+    high_resolution_clock::time_point time2;
+       double M00 = 0.0, M1x = 0.0, M1y = 0.0;
     int xc = 0;
     int yc = 0;
     int hue = 0;
@@ -141,6 +140,11 @@ void SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, Region
     int prevX = 0;
     int prevY = 0;
     
+   time1 = high_resolution_clock::now();
+    
+    Point topLeft = (*roi).getTopLeft();
+    Point bottomRight = (*roi).getBottomRight();
+
     while(converging)
     {
         prevX = (*roi).getCenterX();
@@ -181,6 +185,8 @@ void SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, Region
         
     }//end of converging
     
+    time2 = high_resolution_clock::now();
+    auto cpu_duration = duration_cast<duration<double>>( time2 - time1 ).count();
+    return (float)(cpu_duration * 1000.0); //convert to milliseconds
    // fclose (pFileTXT);
-    
-}
+ }

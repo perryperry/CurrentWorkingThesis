@@ -9,6 +9,18 @@
 
 //#include "gpuReductionKernels.h"
 
+struct device_struct {
+    int * d_cx;
+    int * d_cy;
+    int * d_col_offset;
+    int * d_row_offset;
+    unsigned char * d_frame;
+}; typedef struct device_struct d_struct;
+
+void initDeviceStruct(d_struct * ds, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset);
+
+void freeDeviceStruct(d_struct * ds);
+
 void reverseIt(float * histogram);
 
 int gpuReduceMain(int blockWidth, float * M00, float * M1x, float * M1y, int length, int * xc, int * yc);
@@ -31,6 +43,11 @@ int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLengt
 float launchMeanShiftKernelForEntireFrame(unsigned char * hueFrame, int hueFrameLength, int hueSubFrameLength, int abs_width, int sub_width, int sub_height, int * row_offset, int * col_offset, int * cx, int * cy);
 
 float launchSingleKernelEntireFrame(unsigned char * hueFrame, int hueFrameLength, int hueSubFrameLength, int abs_width, int sub_width, int sub_height, int * row_offset, int * col_offset, int * cx, int * cy);
+
+
+float testThat(d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int * cx, int * cy);
+
+
 
 #endif
 

@@ -433,6 +433,49 @@ int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLengt
     return 1;
 }
 
+
+void initDeviceStruct(d_struct * ds, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset)
+{
+    cudaError_t err; 
+    int * d_cx;
+    int * d_cy;
+    int * d_col_offset;
+    int * d_row_offset;
+    unsigned char * d_frame;
+
+    if(( err = cudaMalloc((void **)&d_frame, frameLength * sizeof(unsigned char))) != cudaSuccess)
+          printf("%s\n", cudaGetErrorString(err));
+    err = cudaMemcpy(d_frame, frame, frameLength * sizeof(unsigned char), cudaMemcpyHostToDevice);  
+    if((err = cudaMalloc((void **)&d_cx, sizeof(int))) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+    err = cudaMemcpy(d_cx, cx, sizeof(int), cudaMemcpyHostToDevice);
+    if((err = cudaMalloc((void **)&d_cy, sizeof(int))) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+    err = cudaMemcpy(d_cy, cy, sizeof(int), cudaMemcpyHostToDevice);
+    if((err = cudaMalloc((void **)&d_row_offset, sizeof(int))) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+    err = cudaMemcpy(d_row_offset, row_offset, sizeof(int), cudaMemcpyHostToDevice);
+    if((err = cudaMalloc((void **)&d_col_offset, sizeof(int))) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+    err = cudaMemcpy(d_col_offset, col_offset, sizeof(int), cudaMemcpyHostToDevice);
+
+    (*ds).d_frame = d_frame;
+    (*ds).d_cx = d_cx;
+    (*ds).d_cy = d_cy;
+    (*ds).d_col_offset = d_col_offset;
+    (*ds).d_row_offset = d_row_offset;
+}
+
+void freeDeviceStruct(d_struct * ds)
+{
+    cudaFree((*ds).d_frame);
+    cudaFree((*ds).d_cx);
+    cudaFree((*ds).d_cy);
+    cudaFree((*ds).d_row_offset);
+    cudaFree((*ds).d_col_offset);
+}
+
+
 // Working kernel: processes frame in two steps, leaving the entire frame in global device memory. First it gets local summations per block, then launches second kernel to summate them into a total.
 // The only writing back to the host is of the cx and cy to check if the convergence has happened. 
 
@@ -493,6 +536,13 @@ float launchMeanShiftKernelForEntireFrame(unsigned char * hueFrame, int hueFrame
  if(( err = cudaMalloc((void **)&d_in, hueFrameLength * sizeof(unsigned char))) != cudaSuccess)
         printf("%s\n", cudaGetErrorString(err));
 
+
+
+    cudaEventCreate(&launch_begin);
+    cudaEventCreate(&launch_end);
+    cudaEventRecord(launch_begin,0);
+
+
     err = cudaMemcpy(d_in, hueFrame, hueFrameLength * sizeof(unsigned char), cudaMemcpyHostToDevice);
 
     if(num_block <= tile_width)
@@ -539,14 +589,13 @@ float launchMeanShiftKernelForEntireFrame(unsigned char * hueFrame, int hueFrame
 */
 float launchSingleKernelEntireFrame(unsigned char * hueFrame, int hueFrameLength, int hueSubFrameLength, int abs_width, int sub_width, int sub_height, int * row_offset, int * col_offset, int * cx, int * cy)
 {
-  float time = 0;
+   float time = 0;
    // printf("\nInside Launching GPU MeanShift for entire frame...\n");
- /*   cudaEvent_t launch_begin, launch_end;
+    cudaEvent_t launch_begin, launch_end;
     int tile_width = 1024;
     int num_block = ceil( (float) hueSubFrameLength / (float) tile_width);
     dim3 block(tile_width, 1, 1);
     dim3 grid(num_block, 1, 1);
-    unsigned int dynamic_sharedMem_size = 3 * num_block * sizeof(float);
     unsigned char * d_in;
 
     int * h_cxy = (int *) malloc(2 * sizeof(int));
@@ -554,6 +603,7 @@ float launchSingleKernelEntireFrame(unsigned char * hueFrame, int hueFrameLength
     h_cxy[1] = *cy;
 
     int * d_cxy;
+    int * d_ready;
 
    cudaError_t err; 
 
@@ -562,6 +612,9 @@ float launchSingleKernelEntireFrame(unsigned char * hueFrame, int hueFrameLength
     cudaEventCreate(&launch_end);
     cudaEventRecord(launch_begin,0);
 
+
+     if((err = cudaMalloc((void **)&d_ready, num_block * sizeof(int))) != cudaSuccess) 
+        printf("%s\n", cudaGetErrorString(err));
 
     if((err = cudaMalloc((void **)&d_cxy, 2 * sizeof(int))) != cudaSuccess) 
         printf("%s\n", cudaGetErrorString(err));
@@ -593,27 +646,20 @@ float launchSingleKernelEntireFrame(unsigned char * hueFrame, int hueFrameLength
     //Make h_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
     float * h_out = (float *) malloc(3 * num_block * sizeof(float));
 
-     int prevX;
-     int prevY;
+  
 
     if(num_block <= tile_width)
     {
 
-    do{
-      prevX = h_cxy[0];
-      prevY = h_cxy[1];
-      gpuMeanShiftKernelForEntireFrame<<< grid, block >>>(d_in, d_out, hueSubFrameLength, num_block, abs_width, sub_width, sub_height, d_row_offset, d_col_offset, d_cxy);
-      gpuFinalReduce<<< 1, num_block, dynamic_sharedMem_size >>>(d_out, d_cxy, d_row_offset, d_col_offset, sub_width, sub_height, num_block);
-      err =  cudaMemcpy(h_cxy, d_cxy, 2 * sizeof(int), cudaMemcpyDeviceToHost);
-      //cudaDeviceSynchronize();
-    }while(prevX != h_cxy[0] && prevY != h_cxy[1]);
+      gpuSingleKernelMeanShift<<< grid, block >>>(d_in, d_out, d_ready, hueSubFrameLength, num_block, abs_width, sub_width, sub_height, d_row_offset, d_col_offset, d_cxy);
+   
 
-    cudaEventRecord(launch_end,0);
-    cudaEventSynchronize(launch_end);
-    cudaEventElapsedTime(&time, launch_begin, launch_end);
+      cudaEventRecord(launch_end,0);
+      cudaEventSynchronize(launch_end);
+      cudaEventElapsedTime(&time, launch_begin, launch_end);
 
-   // printf("GPU time cost in milliseconds: %f\n", time);
-   // printf("GPU--> here is the new cx: %d cy: %d\n", h_cxy[0], h_cxy[1]);
+     // printf("GPU time cost in milliseconds: %f\n", time);
+     // printf("GPU--> here is the new cx: %d cy: %d\n", h_cxy[0], h_cxy[1]);
 
   }
   else
@@ -629,6 +675,89 @@ float launchSingleKernelEntireFrame(unsigned char * hueFrame, int hueFrameLength
     cudaFree(d_cxy);
     cudaFree(d_row_offset);
     cudaFree(d_col_offset);
-  */
+    cudaFree(d_ready);
     return time;
+}
+
+float testThat(d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int * cx, int * cy)
+{
+   float time = 0;
+   // printf("\nInside Launching GPU MeanShift for entire frame...\n");
+    cudaEvent_t launch_begin, launch_end;
+    int tile_width = 1024;
+    int num_block = ceil( (float) subFrameLength / (float) tile_width);
+    dim3 block(tile_width, 1, 1);
+    dim3 grid(num_block, 1, 1);
+    unsigned int dynamic_sharedMem_size = 3 * num_block * sizeof(float);
+
+    cudaError_t err; 
+
+    cudaEventCreate(&launch_begin);
+    cudaEventCreate(&launch_end);
+    cudaEventRecord(launch_begin,0);
+    int * h_cx = (int *) malloc(sizeof(int));
+    int * h_cy = (int *) malloc(sizeof(int));
+    h_cx[0] = -1;
+    h_cy[0] = -1;
+    //Make d_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
+    float * d_out;
+    if((err = cudaMalloc((void **)&d_out, 3 * num_block * sizeof(float)))!= cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+
+    //Make h_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
+    float * h_out = (float *) malloc(3 * num_block * sizeof(float));
+
+     int prevX = 0;
+     int prevY = 0;
+
+    cudaEventCreate(&launch_begin);
+    cudaEventCreate(&launch_end);
+    cudaEventRecord(launch_begin,0);
+
+
+    err = cudaMemcpy(ds.d_frame, frame, frameLength * sizeof(unsigned char), cudaMemcpyHostToDevice);
+
+    if(num_block <= tile_width)
+    {
+
+    while(prevX != h_cx[0] && prevY != h_cy[1]){
+
+      prevX = h_cx[0];
+      prevY = h_cy[0];
+      testKernel<<< grid, block >>>(ds.d_frame, d_out, subFrameLength, num_block, abs_width, sub_width, sub_height, ds.d_row_offset, ds.d_col_offset);
+      testFinal<<< 1, num_block, dynamic_sharedMem_size >>>(d_out, ds.d_cx, ds.d_cy, ds.d_row_offset, ds.d_col_offset, sub_width, sub_height, num_block);
+
+      err =  cudaMemcpy(h_cx, ds.d_cx, sizeof(int), cudaMemcpyDeviceToHost);
+      err =  cudaMemcpy(h_cy, ds.d_cy, sizeof(int), cudaMemcpyDeviceToHost);
+      //cudaDeviceSynchronize();
+
+      printf("PrevX vs h_cx(%d, %d) and PrevY vs h_cy(%d, %d)\n", prevX, h_cx[0], prevY, h_cy[0]);
+
+    }
+
+    cudaEventRecord(launch_end,0);
+    cudaEventSynchronize(launch_end);
+    cudaEventElapsedTime(&time, launch_begin, launch_end);
+
+   printf("GPU time cost in milliseconds: %f\n", time);
+  printf("GPU--> here is the new cx: %d cy: %d\n", h_cx[0], h_cy[0]);
+
+  }
+  else
+    printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", num_block, tile_width);
+
+   *cx = h_cx[0];
+    *cy = h_cy[0];
+
+
+
+    cudaFree(d_out);
+    free(h_out);
+    free(h_cx);
+    free(h_cy);
+
+   
+    return time;
+
+
 }

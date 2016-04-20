@@ -80,6 +80,8 @@ void * test(void * data)
 
 int main(int argc, const char * argv[])
 {
+    d_struct ds;
+    
     float gpu_time_cost = 0.0;
     float cpu_time_cost = 0;
     
@@ -87,7 +89,7 @@ int main(int argc, const char * argv[])
     high_resolution_clock::time_point time2;
     
     bool shouldProcessVideo = true;
-    bool shouldCPU = true;
+    bool shouldCPU = false;
     bool shouldGPU = true;
     bool shouldBackProjectFrame = false;
     int gpu_xc = 0;
@@ -209,16 +211,72 @@ int main(int argc, const char * argv[])
     
     
     
+    
+ 
+    
+       // gpu_time_cost += launchMeanShiftKernelForEntireFrame(entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, row_offset, col_offset, &cx, &cy);
+        //gpu_roi.setCentroid(Point(cx, cy));
+    if(shouldCPU){
+        cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, &cpu_roi, histogram);
+        cpu_roi.drawCPU_ROI(&frame);
+    }
+        
+        
+    if(shouldGPU)
+    {
+        initDeviceStruct(&ds, entireHueArray, totalHue, &cx, &cy, col_offset, row_offset);
+        testThat(ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy);
+        
+        printf("\n\nWhat am I getting here?! %d, %d\n", cx, cy);
+        gpu_roi.setCentroid(Point(cx, cy));
+        gpu_roi.drawGPU_ROI(&frame);
+    }
+        
+    printf("******************************************************************************************************************\n");
+    
+   /* cap.read(frame);
+    
+   totalHue = convertToHueArray(frame, &entireHueArray, &step);
+   cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, &cpu_roi, histogram);
+   
+    
+    
+    if(shouldGPU)
+    {
+        testThat(ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy);
+        gpu_roi.setCentroid(Point(cx, cy));
+        gpu_roi.drawGPU_ROI(&frame);
+    }
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    */
+    
+    
+    
+    
+    
+    
+    
+    
+    
+        outputVideo.write(frame);
+    
+    
+    
+    
     if( shouldProcessVideo )
     {
-        cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, &cpu_roi, histogram);
-        gpu_time_cost += launchMeanShiftKernelForEntireFrame(entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, row_offset, col_offset, &cx, &cy);
-        gpu_roi.setCentroid(Point(cx, cy));
-        if(shouldCPU)
-            cpu_roi.drawCPU_ROI(&frame);
-        if(shouldGPU)
-            gpu_roi.drawGPU_ROI(&frame);
-        outputVideo.write(frame);
+    
     /******************************************************************************************************************/
    
         while(cap.read(frame))
@@ -229,12 +287,22 @@ int main(int argc, const char * argv[])
             if(shouldCPU)
                 cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, &cpu_roi, histogram);
                        /******************************** GPU MeanShift until Convergence **********************************************/
-            if(shouldGPU){
+        /*    if(shouldGPU){
                 row_offset[0] = gpu_roi.getTopLeftY();
                 col_offset[0] = gpu_roi.getTopLeftX();
                 gpu_time_cost += launchMeanShiftKernelForEntireFrame(entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, row_offset, col_offset, &cx, &cy);
                 gpu_roi.setCentroid(Point(cx, cy));
+            }*/
+            
+            if(shouldGPU)
+            {
+               gpu_time_cost += testThat(ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy);
+                gpu_roi.setCentroid(Point(cx, cy));
+                gpu_roi.drawGPU_ROI(&frame);
             }
+
+            
+            
             /******************************** Write to Output Video *******************************************/
             if(shouldBackProjectFrame){
                 if(shouldCPU)
@@ -261,6 +329,6 @@ int main(int argc, const char * argv[])
     free(histogram);
     free(row_offset);
     free(col_offset);
-    
+     freeDeviceStruct(&ds);
    return 0;
 }

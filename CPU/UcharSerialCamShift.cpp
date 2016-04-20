@@ -163,22 +163,26 @@ float SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, Regio
             }
              //printf("OTHER NEW--> %d %d %d %d\n", hue, (int)M00, (int)M1x,(int) M1y);
         }
-        //  printf("Inside Entire Frame CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
+        
         if(M00 > 0){//Can't divide by zero...
             
-            xc = (int)(M1x / M00);
-            yc = (int)(M1y / M00);
+            xc = (int)((int)M1x / (int)M00);
+            yc = (int)((int)M1y / (int)M00);
             (*roi).setCentroid(Point(xc, yc));
-           // printf("Inside Entire Frame CPU MeanShift ---> centroid (%d, %d)  topX, topY (%d,%d)\n", xc, yc, (*roi).getTopLeftX(), (*roi).getTopLeftY());
+          
         }
         
-        if(prevX - xc < 1 && prevX - xc > -1  && prevY - yc < 1 && prevY - yc > -1)
+        //if(prevX - xc < 1 && prevX - xc > -1  && prevY - yc < 1 && prevY - yc > -1)
+        if(prevX == xc && prevY == yc)
             converging = false;
         else
         {
             prevX = xc;
             prevY = yc;
         }
+        printf("Inside Entire Frame CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
+        printf("Inside Entire Frame CPU MeanShift ---> centroid (%d, %d)  topX, topY (%d,%d)\n", xc, yc, (*roi).getTopLeftX(), (*roi).getTopLeftY());
+
         M00 = 0.0;
         M1x = 0.0;
         M1y = 0.0;
@@ -188,5 +192,6 @@ float SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, Regio
     time2 = high_resolution_clock::now();
     auto cpu_duration = duration_cast<duration<double>>( time2 - time1 ).count();
     return (float)(cpu_duration * 1000.0); //convert to milliseconds
+    
    // fclose (pFileTXT);
  }

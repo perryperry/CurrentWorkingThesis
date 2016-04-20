@@ -19,6 +19,8 @@ __global__ void gpuMeanShiftKernelForSubFrame(unsigned char * g_idata, float *g_
 
 __global__ void gpuMeanShiftKernelForEntireFrame(unsigned char *g_idata, float *g_odata, int subframe_length, int blockCount, int abs_width, int sub_width, int sub_height, int * row_offset, int * col_offset, int * cxy);
 
+__global__ void gpuSingleKernelMeanShift(unsigned char *g_idata, float *g_odata, int * readyArray, int subframe_length, int blockCount, int abs_width, int sub_width, int sub_height, int * row_offset, int * col_offset, int * cxy);
+
 //__device__ void warpReduce(volatile float* sdata, int tid);
 
 __device__ void warpReduce(volatile float* shared_M00, volatile float* shared_M1x, volatile float* shared_M1y, int tid);
@@ -29,5 +31,22 @@ void setConstantMemoryHistogram(float * histogram);
 
 
 __global__ void  gpuFinalReduce(float * g_odata, int * cxy, int * row_offset, int * col_offset, int sub_width, int sub_height, int num_block);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+__global__ void testKernel(unsigned char *g_idata, float *g_odata, int subframe_length, int blockCount, int abs_width, int sub_width, int sub_height, int * row_offset, int * col_offset);
+__global__ void  testFinal(float * g_odata, int * cx, int *cy, int * row_offset, int * col_offset, int sub_width, int sub_height, int num_block);
+
 
 #endif

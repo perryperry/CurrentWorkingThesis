@@ -80,7 +80,7 @@ void * test(void * data)
 
 int main(int argc, const char * argv[])
 {
-    d_struct ds;
+    d_struct * ds = (d_struct *) malloc(sizeof(d_struct));
     
     float gpu_time_cost = 0.0;
     float cpu_time_cost = 0;
@@ -191,32 +191,7 @@ int main(int argc, const char * argv[])
         row_offset[0] = gpu_roi.getTopLeftY();
         col_offset[0] = gpu_roi.getTopLeftX();
     
-    /********************************** Testing Pre-loading Matrix **********************************************/
-   // printf("It has %d pixels\n", totalHue);
-    
-   /* Mat matrixes[totalFrames];
-    unsigned char ** hueArrays = (unsigned char **) malloc(totalFrames * totalHue * sizeof(unsigned char *));
-    int i = 0;
-    
-    do{
-        matrixes[i] = frame.clone();
-        convertToHueArray(matrixes[i], &(hueArrays[i]), &step);
-        i++;
-    }while(cap.read(frame));
-    
-    for(i = 0; i < totalFrames; i++)
-        outputVideo.write(matrixes[i]);*/
-   
-    /******************************************************************************************************************/
-    
-    
-    
-    
- 
-    
-       // gpu_time_cost += launchMeanShiftKernelForEntireFrame(entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, row_offset, col_offset, &cx, &cy);
-        //gpu_roi.setCentroid(Point(cx, cy));
-    if(shouldCPU){
+   if(shouldCPU){
         cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, &cpu_roi, histogram);
         cpu_roi.drawCPU_ROI(&frame);
     }
@@ -224,8 +199,8 @@ int main(int argc, const char * argv[])
         
     if(shouldGPU)
     {
-        initDeviceStruct(&ds, entireHueArray, totalHue, &cx, &cy, col_offset, row_offset);
-        testThat(ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy);
+        initDeviceStruct(ds, entireHueArray, totalHue, &cx, &cy, col_offset, row_offset);
+        testThat(*ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy);
         
         printf("\n\nWhat am I getting here?! %d, %d\n", cx, cy);
         gpu_roi.setCentroid(Point(cx, cy));
@@ -234,42 +209,8 @@ int main(int argc, const char * argv[])
         
     printf("******************************************************************************************************************\n");
     
-   /* cap.read(frame);
-    
-   totalHue = convertToHueArray(frame, &entireHueArray, &step);
-   cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, &cpu_roi, histogram);
    
-    
-    
-    if(shouldGPU)
-    {
-        testThat(ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy);
-        gpu_roi.setCentroid(Point(cx, cy));
-        gpu_roi.drawGPU_ROI(&frame);
-    }
-
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    */
-    
-    
-    
-    
-    
-    
-    
-    
-    
-        outputVideo.write(frame);
+    outputVideo.write(frame);
     
     
     
@@ -296,7 +237,7 @@ int main(int argc, const char * argv[])
             
             if(shouldGPU)
             {
-               gpu_time_cost += testThat(ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy);
+               gpu_time_cost += testThat(*ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy);
                 gpu_roi.setCentroid(Point(cx, cy));
                 gpu_roi.drawGPU_ROI(&frame);
             }
@@ -329,6 +270,7 @@ int main(int argc, const char * argv[])
     free(histogram);
     free(row_offset);
     free(col_offset);
-     freeDeviceStruct(&ds);
-   return 0;
+     freeDeviceStruct(ds);
+	free(ds);   
+return 0;
 }

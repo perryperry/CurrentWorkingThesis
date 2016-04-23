@@ -15,8 +15,6 @@
 #include "CPU/RegionOfInterest.hpp"
 #include "CPU/UcharSerialCamShift.hpp"
 #include <chrono>
-
-#include "GPU/timing.h"
 #include <pthread.h>
 
 using namespace cv;
@@ -211,7 +209,7 @@ int main(int argc, const char * argv[])
     if(shouldGPU)
     {
         initDeviceStruct(ds, entireHueArray, totalHue, &cx, &cy, col_offset, row_offset);
-        testThat(*ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy, shouldPrint);
+        launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy, shouldPrint);
         gpu_roi.setCentroid(Point(cx, cy));
         gpu_roi.drawGPU_ROI(&frame);
     }
@@ -228,7 +226,7 @@ int main(int argc, const char * argv[])
             /******************************** GPU MeanShift until Convergence **********************************************/
             if(shouldGPU)
             {
-                gpu_time_cost += testThat(*ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy, shouldPrint);
+                gpu_time_cost += launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy, shouldPrint);
                 gpu_roi.setCentroid(Point(cx, cy));
                 gpu_roi.drawGPU_ROI(&frame);
             }

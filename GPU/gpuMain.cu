@@ -679,10 +679,10 @@ float launchSingleKernelEntireFrame(unsigned char * hueFrame, int hueFrameLength
     return time;
 }
 
-float testThat(d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int * cx, int * cy)
+float testThat(d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int * cx, int * cy, bool shouldPrint)
 {
-   float time = 0;
-   // printf("\nInside Launching GPU MeanShift for entire frame...\n");
+    float time = 0;
+    // printf("\nInside Launching GPU MeanShift for entire frame...\n");
     cudaEvent_t launch_begin, launch_end;
     int tile_width = 1024;
     int num_block = ceil( (float) subFrameLength / (float) tile_width);
@@ -729,19 +729,15 @@ float testThat(d_struct ds, unsigned char * frame, int frameLength, int subFrame
 
       err =  cudaMemcpy(h_cx, ds.d_cx, sizeof(int), cudaMemcpyDeviceToHost);
       err =  cudaMemcpy(h_cy, ds.d_cy, sizeof(int), cudaMemcpyDeviceToHost);
-      //cudaDeviceSynchronize();
-
-      printf("PrevX vs h_cx(%d, %d) and PrevY vs h_cy(%d, %d)\n", prevX, h_cx[0], prevY, h_cy[0]);
+     
+      if(shouldPrint)
+     	printf("PrevX vs NewX(%d, %d) and PrevY vs NewY(%d, %d)\n", prevX, h_cx[0], prevY, h_cy[0]);
 
     }
-
+    cudaDeviceSynchronize();
     cudaEventRecord(launch_end,0);
     cudaEventSynchronize(launch_end);
     cudaEventElapsedTime(&time, launch_begin, launch_end);
-
-   printf("GPU time cost in milliseconds: %f\n", time);
-  printf("GPU--> here is the new cx: %d cy: %d\n", h_cx[0], h_cy[0]);
-
   }
   else
     printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", num_block, tile_width);

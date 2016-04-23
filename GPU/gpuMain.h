@@ -45,7 +45,7 @@ float launchMeanShiftKernelForEntireFrame(unsigned char * hueFrame, int hueFrame
 float launchSingleKernelEntireFrame(unsigned char * hueFrame, int hueFrameLength, int hueSubFrameLength, int abs_width, int sub_width, int sub_height, int * row_offset, int * col_offset, int * cx, int * cy);
 
 
-float testThat(d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int * cx, int * cy);
+float testThat(d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int * cx, int * cy, bool shouldPrint);
 
 
 

@@ -528,7 +528,7 @@ __global__ void testKernel(unsigned char *g_idata, float *g_odata, int subframe_
 
   if( i == 0 )
   {
-      printf("In GPU testKernel --> topX: %d topY: %d\n",col_offset[0], row_offset[0] );
+     // printf("In GPU testKernel --> topX: %d topY: %d\n",col_offset[0], row_offset[0] );
   }
 
   if(i < subframe_length) 
@@ -613,7 +613,7 @@ __global__ void testFinal(float * g_odata, int * cx, int * cy, int * row_offset,
 
       cx[0] = newX;
       cy[0] = newY;
-      printf("\nIn gpuFinalReduce: M00:%lf M1x:%lf M1y: %lf, NewX: %d NewY: %d \n", M00, M1x, M1y, newX, newY);
+     // printf("\nIn gpuFinalReduce: M00:%lf M1x:%lf M1y: %lf, NewX: %d NewY: %d \n", M00, M1x, M1y, newX, newY);
     }
 }
 

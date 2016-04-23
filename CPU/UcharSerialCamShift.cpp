@@ -124,13 +124,13 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
     }
 }
 
-float SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, RegionOfInterest * roi, float * histogram)
+float SerialCamShift::cpu_entireFrameMeanShift(unsigned char * hueArray, int step, RegionOfInterest * roi, float * histogram, bool shouldPrint)
 {
    // FILE * pFileTXT;
   ///  pFileTXT = fopen ("entire.txt","a");
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
-       double M00 = 0.0, M1x = 0.0, M1y = 0.0;
+    double M00 = 0.0, M1x = 0.0, M1y = 0.0;
     int xc = 0;
     int yc = 0;
     int hue = 0;
@@ -150,9 +150,9 @@ float SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, Regio
         prevX = (*roi).getCenterX();
         prevY = (*roi).getCenterY();
         
-        for(int col = (*roi).getTopLeftX(); col < (*roi).getBottomRightX();col++)// (*roi).getTopLeftX() + (*roi)._width; col ++)
+        for(int col = (*roi).getTopLeftX(); col < (*roi).getBottomRightX();col++)
         {
-            for(int row = (*roi).getTopLeftY(); row < (*roi).getBottomRightY();row++)//(*roi).getTopLeftY() + (*roi)._height; row++)
+            for(int row = (*roi).getTopLeftY(); row < (*roi).getBottomRightY();row++)
             {
                 hue = hueArray[ step * row + col ];
                 probability = histogram[hue / BUCKET_WIDTH];
@@ -165,13 +165,12 @@ float SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, Regio
         }
         
         if(M00 > 0){//Can't divide by zero...
-            
             xc = (int)((int)M1x / (int)M00);
             yc = (int)((int)M1y / (int)M00);
             (*roi).setCentroid(Point(xc, yc));
-          
         }
-        
+        else
+            return 0.0;
         //if(prevX - xc < 1 && prevX - xc > -1  && prevY - yc < 1 && prevY - yc > -1)
         if(prevX == xc && prevY == yc)
             converging = false;
@@ -180,18 +179,18 @@ float SerialCamShift::cpu_entireFrameMeanShift(uchar * hueArray, int step, Regio
             prevX = xc;
             prevY = yc;
         }
-        printf("Inside Entire Frame CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
-        printf("Inside Entire Frame CPU MeanShift ---> centroid (%d, %d)  topX, topY (%d,%d)\n", xc, yc, (*roi).getTopLeftX(), (*roi).getTopLeftY());
-
+        
+        if(shouldPrint){
+            printf("Inside CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
+            printf("Inside CPU MeanShift ---> centroid:(%d, %d), topX:%d, topY:%d\n", xc, yc, (*roi).getTopLeftX(), (*roi).getTopLeftY());
+        }
         M00 = 0.0;
         M1x = 0.0;
         M1y = 0.0;
         
     }//end of converging
-    
+    // fclose (pFileTXT);
     time2 = high_resolution_clock::now();
     auto cpu_duration = duration_cast<duration<double>>( time2 - time1 ).count();
     return (float)(cpu_duration * 1000.0); //convert to milliseconds
-    
-   // fclose (pFileTXT);
  }

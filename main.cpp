@@ -103,7 +103,6 @@ void menu(int * num_objects, bool * processVid, bool * cpu, bool * gpu, bool * p
         exit(-1);
 }
 
-
 int main(int argc, const char * argv[])
 {
     bool shouldProcessVideo = false;
@@ -115,7 +114,29 @@ int main(int argc, const char * argv[])
    
     parameterCheck(argc);
     menu(&num_objects, &shouldProcessVideo, &shouldCPU, &shouldGPU, &shouldPrint, &shouldBackProjectFrame);
+    VideoCapture cap(argv[1]);
+    int x, y, x2, y2, obj_cur = 0;
     
+    ifstream infile(argv[2]);
+    
+    RegionOfInterest cpu_objects[num_objects];
+    RegionOfInterest gpu_objects[num_objects];
+    
+    //Read in windows from input file
+    while (infile >> x >> y >> x2 >> y2)
+    {
+        if(obj_cur > num_objects)
+        {
+            cout << "ERROR: Too many lines in input file for number of objects to track!" << endl;
+            exit(-1);
+        }
+        cout << x <<  " " << y << " " << x2 << " " << y2 << endl;
+        
+        cpu_objects[obj_cur].init(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
+        gpu_objects[obj_cur].init(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
+        obj_cur++;
+    }
+    obj_cur = 1; //reset the current object index
     d_struct * ds = (d_struct *) malloc(sizeof(d_struct));
     
     float gpu_time_cost = 0.0;
@@ -126,6 +147,8 @@ int main(int argc, const char * argv[])
     
     int gpu_xc = 0;
     int gpu_yc = 0;
+    int cpu_cx = 0;
+    int cpu_cy = 0;
     int gpu_prevX = 0;
     int gpu_prevY = 0;
     int * row_offset = (int *) malloc(sizeof(int));
@@ -136,28 +159,6 @@ int main(int argc, const char * argv[])
     Mat subHueFrame;
     float * histogram = (float *) calloc(sizeof(float), BUCKETS);
 
-    VideoCapture cap(argv[1]);
-    
-    int x, y, x2, y2, obj_counter = 0;
-    
-    ifstream infile(argv[2]);
-    
-    RegionOfInterest cpu_objects[num_objects];
-    RegionOfInterest gpu_objects[num_objects];
-    
-    //Read in windows from input file
-    while (infile >> x >> y >> x2 >> y2)
-    {
-        cout << x <<  " " << y << " " << x2 << " " << y2 << endl;
-        
-        
-        
-        
-        
-        
-        obj_counter++;
-    }
-    
     //open output VideoWriter
     
     VideoWriter outputVideo = VideoWriter();
@@ -191,86 +192,91 @@ int main(int argc, const char * argv[])
     /*************************************** End Testing Pthread *********************************************/
 
     
-        cap.read(frame);
-
-        RegionOfInterest cpu_roi;
-        cpu_roi.init(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
-        RegionOfInterest gpu_roi;
-        gpu_roi.init(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
-      
-       // time1 = high_resolution_clock::now();
+    cap.read(frame);
+   
+    // time1 = high_resolution_clock::now();
         
-        convertToSubHue(frame, gpu_roi, &subHueFrame);
+    convertToSubHue(frame, gpu_objects[obj_cur], &subHueFrame);
         
-       // time2 = high_resolution_clock::now();
-       // auto duration2 = duration_cast<microseconds>( time2 - time1 ).count();
+    // time2 = high_resolution_clock::now();
+    // auto duration2 = duration_cast<microseconds>( time2 - time1 ).count();
         
-       // cout << "Duration of preparing using subframe with converting to hsv: " << duration2 / 1000.0 << endl;
+    // cout << "Duration of preparing using subframe with converting to hsv: " << duration2 / 1000.0 << endl;
     
     /************************************* First Frame initialize and process ****************************************/
     unsigned char * hueArray = (unsigned char * ) subHueFrame.data;
-    camShift.createHistogram(hueArray, cpu_roi, &histogram);
+    camShift.createHistogram(hueArray, cpu_objects[obj_cur], &histogram);
+    
+     camShift.createHistogram(hueArray, cpu_objects[obj_cur], &histogram);
+    
     mainConstantMemoryHistogramLoad(histogram);
     // camShift.printHistogram(histogram, BUCKETS);
-    
-    
     
     //block for testing
     if(! shouldProcessVideo )
     {
-        gpu_roi.drawGPU_ROI(&frame);
+      //  gpu_roi.drawGPU_ROI(&frame);
+        gpu_objects[obj_cur].drawGPU_ROI(&frame);
+        cpu_objects[obj_cur].drawCPU_ROI(&frame);
         outputVideo.write(frame);
     }
     
-    int cx = gpu_roi.getCenterX(), cy = gpu_roi.getCenterY();
+    int cx = gpu_objects[obj_cur].getCenterX(), cy = gpu_objects[obj_cur].getCenterY();
     int step;
     unsigned char * entireHueArray;
     int totalHue = convertToHueArray(frame, &entireHueArray, &step);
         
-    row_offset[0] = gpu_roi.getTopLeftY();
-    col_offset[0] = gpu_roi.getTopLeftX();
+    row_offset[0] = gpu_objects[obj_cur].getTopLeftY();
+    col_offset[0] = gpu_objects[obj_cur].getTopLeftX();
     
-    if( shouldProcessVideo )
-    {
-        
+   
        if(shouldCPU){
-            cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, &cpu_roi, histogram, shouldPrint);
-            cpu_roi.drawCPU_ROI(&frame);
+           cpu_objects[obj_cur].printROI();
+           cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, cpu_objects[obj_cur], histogram, shouldPrint, &cpu_cx, &cpu_cy);
+           cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
+           cpu_objects[obj_cur].printROI();
+           cpu_objects[obj_cur].drawCPU_ROI(&frame);
         }
         if(shouldGPU)
         {
-            initDeviceStruct(ds, entireHueArray, totalHue, &cx, &cy, col_offset, row_offset);
-            launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy, shouldPrint);
-            gpu_roi.setCentroid(Point(cx, cy));
-            gpu_roi.drawGPU_ROI(&frame);
+           initDeviceStruct(ds, entireHueArray, totalHue, &cx, &cy, col_offset, row_offset);
+           gpu_time_cost += launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_objects[obj_cur].getTotalPixels(), step, gpu_objects[obj_cur]._width, gpu_objects[obj_cur]._height, &cx, &cy, shouldPrint);
+           gpu_objects[obj_cur].setCentroid(Point(cx, cy));
+           gpu_objects[obj_cur].drawGPU_ROI(&frame);
         }
     /**************************************** Process the rest of the video ***********************************/
     
         outputVideo.write(frame);
+    
+    
+    if( shouldProcessVideo )
+    {
         while(cap.read(frame))
         {
             totalHue = convertToHueArray(frame, &entireHueArray, &step);
             /******************************** CPU MeanShift until Convergence ***************************************/
             if(shouldCPU)
-                cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, &cpu_roi, histogram, shouldPrint);
+            {
+                cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, cpu_objects[obj_cur], histogram, shouldPrint, &cpu_cx, &cpu_cy);
+                cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
+                cpu_objects[obj_cur].drawCPU_ROI(&frame);
+            }
             /******************************** GPU MeanShift until Convergence **********************************************/
             if(shouldGPU)
             {
-                gpu_time_cost += launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy, shouldPrint);
-                gpu_roi.setCentroid(Point(cx, cy));
-                gpu_roi.drawGPU_ROI(&frame);
+                gpu_time_cost += launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_objects[obj_cur].getTotalPixels(), step, gpu_objects[obj_cur]._width, gpu_objects[obj_cur]._height, &cx, &cy, shouldPrint);
+                gpu_objects[obj_cur].setCentroid(Point(cx, cy));
+                gpu_objects[obj_cur].drawGPU_ROI(&frame);
+                gpu_objects[obj_cur].drawGPU_ROI(&frame);
             }
             /******************************** Write to Output Video *******************************************/
             if(shouldBackProjectFrame){
                 if(shouldCPU)
-                    camShift.backProjectHistogram(hueArray, frame.step, &frame, cpu_roi, histogram);
+                    camShift.backProjectHistogram(hueArray, frame.step, &frame, cpu_objects[obj_cur], histogram);
                 if(shouldGPU)
-                    camShift.backProjectHistogram(hueArray, frame.step, &frame, gpu_roi, histogram);
+                    camShift.backProjectHistogram(hueArray, frame.step, &frame, gpu_objects[obj_cur], histogram);
             }
-            if(shouldCPU)
-                cpu_roi.drawCPU_ROI(&frame);
-            if(shouldGPU)
-                gpu_roi.drawGPU_ROI(&frame);
+               
             outputVideo.write(frame);
             
         }//end while

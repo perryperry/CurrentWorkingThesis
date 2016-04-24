@@ -33,7 +33,9 @@ public:
     
     void backProjectHistogram(unsigned char * hsv, int step, Mat * frame, RegionOfInterest roi, float * histogram);
     
-    float cpu_entireFrameMeanShift(unsigned char * hueArray, int step, RegionOfInterest * roi, float * histogram, bool shouldPrint);
+    float cpu_entireFrameMeanShift(unsigned char * hueArray, int step, RegionOfInterest  roi, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy);
 };
+
+int distance(int x1, int y1, int x2, int y2);
 
 #endif /* SerialCamShift_hpp */

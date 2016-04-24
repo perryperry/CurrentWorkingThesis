@@ -124,7 +124,7 @@ bool SerialCamShift::subMeanShift(unsigned char * hueArray, RegionOfInterest * r
     }
 }
 
-float SerialCamShift::cpu_entireFrameMeanShift(unsigned char * hueArray, int step, RegionOfInterest * roi, float * histogram, bool shouldPrint)
+float SerialCamShift::cpu_entireFrameMeanShift(unsigned char * hueArray, int step, RegionOfInterest roi, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy)
 {
    // FILE * pFileTXT;
   ///  pFileTXT = fopen ("entire.txt","a");
@@ -142,17 +142,17 @@ float SerialCamShift::cpu_entireFrameMeanShift(unsigned char * hueArray, int ste
     
    time1 = high_resolution_clock::now();
     
-    Point topLeft = (*roi).getTopLeft();
-    Point bottomRight = (*roi).getBottomRight();
+    Point topLeft = roi.getTopLeft();
+    Point bottomRight = roi.getBottomRight();
 
     while(converging)
     {
-        prevX = (*roi).getCenterX();
-        prevY = (*roi).getCenterY();
+        prevX = roi.getCenterX();
+        prevY = roi.getCenterY();
         
-        for(int col = (*roi).getTopLeftX(); col < (*roi).getBottomRightX();col++)
+        for(int col = roi.getTopLeftX(); col < roi.getBottomRightX();col++)
         {
-            for(int row = (*roi).getTopLeftY(); row < (*roi).getBottomRightY();row++)
+            for(int row = roi.getTopLeftY(); row < roi.getBottomRightY();row++)
             {
                 hue = hueArray[ step * row + col ];
                 probability = histogram[hue / BUCKET_WIDTH];
@@ -167,12 +167,13 @@ float SerialCamShift::cpu_entireFrameMeanShift(unsigned char * hueArray, int ste
         if(M00 > 0){//Can't divide by zero...
             xc = (int)((int)M1x / (int)M00);
             yc = (int)((int)M1y / (int)M00);
-            (*roi).setCentroid(Point(xc, yc));
+            roi.setCentroid(Point(xc, yc));
         }
         else
             return 0.0;
-        //if(prevX - xc < 1 && prevX - xc > -1  && prevY - yc < 1 && prevY - yc > -1)
-        if(prevX == xc && prevY == yc)
+       // if(prevX - xc < 1 && prevX - xc > -1  && prevY - yc < 1 && prevY - yc > -1)
+        //if(prevX == xc && prevY == yc)
+        if(distance(prevX, prevY, xc, yc) <= 1)
             converging = false;
         else
         {
@@ -182,7 +183,7 @@ float SerialCamShift::cpu_entireFrameMeanShift(unsigned char * hueArray, int ste
         
         if(shouldPrint){
             printf("Inside CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
-            printf("Inside CPU MeanShift ---> centroid:(%d, %d), topX:%d, topY:%d\n", xc, yc, (*roi).getTopLeftX(), (*roi).getTopLeftY());
+            printf("Inside CPU MeanShift ---> centroid:(%d, %d), topX:%d, topY:%d\n", xc, yc, roi.getTopLeftX(), roi.getTopLeftY());
         }
         M00 = 0.0;
         M1x = 0.0;
@@ -190,7 +191,23 @@ float SerialCamShift::cpu_entireFrameMeanShift(unsigned char * hueArray, int ste
         
     }//end of converging
     // fclose (pFileTXT);
+      if(shouldPrint)
+          printf("************* CPU FINISHED A FRAME *********** \n");
     time2 = high_resolution_clock::now();
     auto cpu_duration = duration_cast<duration<double>>( time2 - time1 ).count();
+    
+    *cpu_cx = xc;
+    *cpu_cy = yc;
     return (float)(cpu_duration * 1000.0); //convert to milliseconds
  }
+
+int distance(int x1, int y1, int x2, int y2)
+{
+    int distx = (x2 - x1) * (x2 - x1);
+    int disty = (y2 - y1) * (y2 - y1);
+    
+    double dist = sqrt(distx + disty);
+    
+    return (int) dist;
+}
+

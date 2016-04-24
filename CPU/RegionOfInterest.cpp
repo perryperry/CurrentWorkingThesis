@@ -8,7 +8,18 @@
 
 #include "RegionOfInterest.hpp"
 
-RegionOfInterest::RegionOfInterest(Point topL, Point botR, int frameWidth, int frameHeight)
+//default constructor, but requires a call to init to get appropriate values
+RegionOfInterest::RegionOfInterest()
+{
+    _topLeft = Point(0,0);
+    _bottomRight = Point(100,100);
+    _width = _bottomRight.x -  _topLeft.x;
+    _height = _bottomRight.y -  _topLeft.y;
+    _frameWidth = 100;
+    _frameHeight = 100;
+    _centroid = calcCentroid(_topLeft, _width, _height);
+}
+void RegionOfInterest::init(Point topL, Point botR, int frameWidth, int frameHeight)
 {
     _topLeft = topL;
     _bottomRight = botR;

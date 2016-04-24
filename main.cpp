@@ -76,10 +76,13 @@ void * test(void * data)
     printf("%s\n", str);
 }
 
-void menu(bool * processVid, bool * cpu, bool * gpu, bool * print, bool * bp)
+void menu(int * num_objects, bool * processVid, bool * cpu, bool * gpu, bool * print, bool * bp)
 {
     int answer = 0;
     printf("GPU vs CPU meanshift menu:\n");
+    cout << "Number of objects:";
+    scanf("%d", &answer);
+    *num_objects = answer;
     cout << "Should process entire video (0/1):";
     scanf("%d", &answer);
     *processVid = answer;
@@ -95,6 +98,9 @@ void menu(bool * processVid, bool * cpu, bool * gpu, bool * print, bool * bp)
     cout << "Should backproject (0/1):";
     scanf("%d", &answer);
     *bp = answer;
+    
+    if(*num_objects == 0)
+        exit(-1);
 }
 
 
@@ -105,10 +111,11 @@ int main(int argc, const char * argv[])
     bool shouldGPU = false;
     bool shouldBackProjectFrame = false;
     bool shouldPrint = false;
-    
+    int num_objects = 1;
+   
     parameterCheck(argc);
-    menu(&shouldProcessVideo, &shouldCPU, &shouldGPU, &shouldPrint, &shouldBackProjectFrame);
-
+    menu(&num_objects, &shouldProcessVideo, &shouldCPU, &shouldGPU, &shouldPrint, &shouldBackProjectFrame);
+    
     d_struct * ds = (d_struct *) malloc(sizeof(d_struct));
     
     float gpu_time_cost = 0.0;
@@ -131,14 +138,24 @@ int main(int argc, const char * argv[])
 
     VideoCapture cap(argv[1]);
     
-    int x, y, x2, y2;
+    int x, y, x2, y2, obj_counter = 0;
     
     ifstream infile(argv[2]);
+    
+    RegionOfInterest cpu_objects[num_objects];
+    RegionOfInterest gpu_objects[num_objects];
     
     //Read in windows from input file
     while (infile >> x >> y >> x2 >> y2)
     {
         cout << x <<  " " << y << " " << x2 << " " << y2 << endl;
+        
+        
+        
+        
+        
+        
+        obj_counter++;
     }
     
     //open output VideoWriter
@@ -176,8 +193,10 @@ int main(int argc, const char * argv[])
     
         cap.read(frame);
 
-        RegionOfInterest cpu_roi(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
-        RegionOfInterest gpu_roi(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
+        RegionOfInterest cpu_roi;
+        cpu_roi.init(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
+        RegionOfInterest gpu_roi;
+        gpu_roi.init(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
       
        // time1 = high_resolution_clock::now();
         
@@ -194,6 +213,15 @@ int main(int argc, const char * argv[])
     mainConstantMemoryHistogramLoad(histogram);
     // camShift.printHistogram(histogram, BUCKETS);
     
+    
+    
+    //block for testing
+    if(! shouldProcessVideo )
+    {
+        gpu_roi.drawGPU_ROI(&frame);
+        outputVideo.write(frame);
+    }
+    
     int cx = gpu_roi.getCenterX(), cy = gpu_roi.getCenterY();
     int step;
     unsigned char * entireHueArray;
@@ -202,20 +230,22 @@ int main(int argc, const char * argv[])
     row_offset[0] = gpu_roi.getTopLeftY();
     col_offset[0] = gpu_roi.getTopLeftX();
     
-   if(shouldCPU){
-        cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, &cpu_roi, histogram, shouldPrint);
-        cpu_roi.drawCPU_ROI(&frame);
-    }
-    if(shouldGPU)
-    {
-        initDeviceStruct(ds, entireHueArray, totalHue, &cx, &cy, col_offset, row_offset);
-        launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy, shouldPrint);
-        gpu_roi.setCentroid(Point(cx, cy));
-        gpu_roi.drawGPU_ROI(&frame);
-    }
-    /**************************************** Process the rest of the video ***********************************/
     if( shouldProcessVideo )
     {
+        
+       if(shouldCPU){
+            cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, &cpu_roi, histogram, shouldPrint);
+            cpu_roi.drawCPU_ROI(&frame);
+        }
+        if(shouldGPU)
+        {
+            initDeviceStruct(ds, entireHueArray, totalHue, &cx, &cy, col_offset, row_offset);
+            launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_roi.getTotalPixels(), step, gpu_roi._width, gpu_roi._height, &cx, &cy, shouldPrint);
+            gpu_roi.setCentroid(Point(cx, cy));
+            gpu_roi.drawGPU_ROI(&frame);
+        }
+    /**************************************** Process the rest of the video ***********************************/
+    
         outputVideo.write(frame);
         while(cap.read(frame))
         {

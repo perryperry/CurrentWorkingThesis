@@ -1,5 +1,5 @@
 gpu: BUILD/kernels.o BUILD/gpuMain.o BUILD/main.o BUILD/RegionOfInterest.o BUILD/UcharSerialCamShift.o
-	nvcc -arch=sm_52 BUILD/kernels.o BUILD/gpuMain.o BUILD/RegionOfInterest.o BUILD/UcharSerialCamShift.o BUILD/main.o -o gpu `pkg-config opencv --cflags --libs` -lpthread
+	nvcc -arch=sm_52 BUILD/kernels.o BUILD/gpuMain.o BUILD/RegionOfInterest.o BUILD/UcharSerialCamShift.o BUILD/main.o -o BUILD/gpuMeanShift `pkg-config opencv --cflags --libs` -lpthread
 BUILD/gpuMain.o: GPU/gpuMain.cu
 	nvcc -arch=sm_52 -c GPU/gpuMain.cu -I/usr/local.cuda-7.0/samples/common -I../../common/inc
 	mv gpuMain.o BUILD
@@ -16,7 +16,7 @@ BUILD/main.o:	main.cpp
 	g++ -c main.cpp -std=c++11 `pkg-config opencv --cflags --libs`
 	mv main.o BUILD
 clean:
-	rm BUILD/*.o gpu out.mov 
+	rm BUILD/* out.mov 
 run:
-	./gpu in.mov windows
+	./BUILD/gpuMeanShift INPUT/in3.mov INPUT/windows.in3
 

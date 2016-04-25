@@ -24,19 +24,6 @@ using namespace std::chrono;
 #define OUTPUTFILENAME "out.mov"
 #define MAXTHREADS 3
 
-float * buildIt()
-{
-    float * array = (float *) calloc(sizeof(float), 12345678);
-
-    int i = 0;
-    
-    for(i = 0; i < 12345678; i ++)
-    {
-        array[i] = 0.17;
-    }
-    return array;
-}
-
 void parameterCheck(int argCount)
 {
     if(argCount != 3)
@@ -143,29 +130,26 @@ int main(int argc, const char * argv[])
     obj_cur = 0; //reset the current object index
     d_struct * ds = (d_struct *) malloc(sizeof(d_struct));
     
-    float gpu_time_cost = 0.0;
-    float cpu_time_cost = 0;
+    float gpu_time_cost = 0.0f;
+    float cpu_time_cost = 0.0f;
     
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
     
-    int gpu_xc = 0;
-    int gpu_yc = 0;
-    int cpu_cx = 0;
-    int cpu_cy = 0;
-    int gpu_prevX = 0;
-    int gpu_prevY = 0;
+    int gpu_cx = 0; //centroid x for gpu
+    int gpu_cy = 0; //centroid y for gpu
+    int cpu_cx = 0; //centroid x for cpu
+    int cpu_cy = 0; //centroid x for cpu
     int step = 0; //The width of the entire frame
-    int * row_offset = (int *) malloc(sizeof(int));
-    int * col_offset = (int *) malloc(sizeof(int));
+    int * row_offset = (int *) malloc(sizeof(int)); //for gpu
+    int * col_offset = (int *) malloc(sizeof(int)); //for gpu
     SerialCamShift camShift;
     
     Mat frame, hsv;
     Mat subHueFrame;
     
-    
-    //open output VideoWriter
-    
+    /*************************************** Open Output VideoWriter *********************************************/
+    //Code for opening VideoWriter taken from http://docs.opencv.org/3.1.0/d7/d9e/tutorial_video_write.html#gsc.tab=0
     VideoWriter outputVideo = VideoWriter();
     int ex = static_cast<int>(cap.get(CV_CAP_PROP_FOURCC));//get codec type in int form
     // Transform from int to char via Bitwise operators
@@ -182,9 +166,7 @@ int main(int argc, const char * argv[])
     else{
         totalFrames = cap.get(CV_CAP_PROP_FRAME_COUNT);
     }
-    
-    //end open output VideoWriter
-    
+
      /*************************************** Testing Pthread *********************************************/
     
     
@@ -193,12 +175,6 @@ int main(int argc, const char * argv[])
      pthread_create(&thread2, NULL, test, (void *)"Keeping it trillion from thread 2.\n");
     
      pthread_join(thread1, NULL);*/
-
-    /*************************************** End Testing Pthread *********************************************/
-
-    
-    
-    
     /************************************* First Frame initialize and process ****************************************/
     cap.read(frame);
     float * histogram = (float *) calloc(sizeof(float), BUCKETS * num_objects);
@@ -210,59 +186,21 @@ int main(int argc, const char * argv[])
 
     mainConstantMemoryHistogramLoad(histogram, num_objects);
     
-    //for testing
-   // if(! shouldProcessVideo )
-   // {
-        
-        //camShift.printHistogram(histTEST, BUCKETS * num_objects);
-       // camShift.printHistogram(histogram, BUCKETS * num_objects);
-       
-        for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
-            cpu_objects[obj_cur].drawCPU_ROI(&frame);
-            gpu_objects[obj_cur].drawGPU_ROI(&frame);
-        }
-        outputVideo.write(frame);
-   // }
-    
-  
-    
-     /*
-       if(shouldCPU){
-          for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
-           
-               cpu_cx = cpu_objects[obj_cur].getCenterX();
-               cpu_cy = cpu_objects[obj_cur].getCenterY();
-               cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
-               cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
-               cpu_objects[obj_cur].drawCPU_ROI(&frame);
-           }
-           printf("**************************************** After first one ***********************************\n");
-
-           for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
-               printf("OBJECT %d: (%d, %d)\n", obj_cur, cpu_objects[obj_cur].getCenterX(), cpu_objects[obj_cur].getCenterY());
-           }
-        }
-        if(shouldGPU)
-        {
-           initDeviceStruct(ds, entireHueArray, totalHue, &cx, &cy, col_offset, row_offset);
-           
-            gpu_time_cost += launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_objects[obj_cur].getTotalPixels(), step, gpu_objects[obj_cur]._width, gpu_objects[obj_cur]._height, &cx, &cy, shouldPrint);
-           gpu_objects[obj_cur].setCentroid(Point(cx, cy));
-           gpu_objects[obj_cur].drawGPU_ROI(&frame);
-        }
-        printf("**************************************** Process the rest of the video ***********************************\n");
-    
-        outputVideo.write(frame);
-    */
-    
+    //For the initial frame, just render the initial search windows' positions
+    for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
+        cpu_objects[obj_cur].drawCPU_ROI(&frame);
+        gpu_objects[obj_cur].drawGPU_ROI(&frame);
+    }
+    outputVideo.write(frame);
     
   if( shouldProcessVideo )
   {
       row_offset[0] = gpu_objects[obj_cur].getTopLeftY();
       col_offset[0] = gpu_objects[obj_cur].getTopLeftX();
-      int cx = gpu_objects[obj_cur].getCenterX(), cy = gpu_objects[obj_cur].getCenterY();
+      gpu_cx = gpu_objects[obj_cur].getCenterX();
+      gpu_cy = gpu_objects[obj_cur].getCenterY();
       
-      initDeviceStruct(ds, entireHueArray, totalHue, &cx, &cy, col_offset, row_offset); //gpu device struct for kernel memory re-use
+      initDeviceStruct(ds, entireHueArray, totalHue, &gpu_cx , &gpu_cy, col_offset, row_offset); //gpu device struct for kernel memory re-use
 
         while(cap.read(frame))
         {
@@ -281,9 +219,8 @@ int main(int argc, const char * argv[])
             /******************************** GPU MeanShift until Convergence **********************************************/
             if(shouldGPU)
             {
-                gpu_time_cost += launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_objects[obj_cur].getTotalPixels(), step, gpu_objects[obj_cur]._width, gpu_objects[obj_cur]._height, &cx, &cy, shouldPrint);
-                gpu_objects[obj_cur].setCentroid(Point(cx, cy));
-                gpu_objects[obj_cur].drawGPU_ROI(&frame);
+                gpu_time_cost += launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_objects[obj_cur].getTotalPixels(), step, gpu_objects[obj_cur]._width, gpu_objects[obj_cur]._height, &gpu_cx , &gpu_cy, shouldPrint);
+                gpu_objects[obj_cur].setCentroid(Point(gpu_cx , gpu_cy));
                 gpu_objects[obj_cur].drawGPU_ROI(&frame);
             }
             /******************************** Write to Output Video *******************************************/

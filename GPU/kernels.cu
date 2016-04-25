@@ -147,9 +147,9 @@ __device__ void warpReduce(volatile float* shared_M00, volatile float* shared_M1
 }
 
 
-void setConstantMemoryHistogram(float * histogram)
+void setConstantMemoryHistogram(float * histogram, int num_objects)
 {
-    cudaMemcpyToSymbol(const_histogram, histogram, sizeof(float) * 60);
+    cudaMemcpyToSymbol(const_histogram, histogram, sizeof(float) * 60 * num_objects);
 }
 
 //************** WORKING KERNELS ********************//

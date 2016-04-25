@@ -154,10 +154,10 @@ int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLengt
 // Below launches new improved kernel stuff
 
 //wrapper function because constant memory must be in the same file that accesses it, linking issue
-void mainConstantMemoryHistogramLoad(float * histogram)
+void mainConstantMemoryHistogramLoad(float * histogram, int num_objects)
 {
   cudaDeviceReset();
-  setConstantMemoryHistogram(histogram);
+  setConstantMemoryHistogram(histogram, num_objects);
 }
 
 void initDeviceStruct(d_struct * ds, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset)

@@ -27,7 +27,7 @@ void printArray(float *arr, int n);
 
 float cpuReduce(float * h_in, int n);
 
-void mainConstantMemoryHistogramLoad(float * histogram);
+void mainConstantMemoryHistogramLoad(float * histogram, int num_objects);
 
 int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLength, int width, int xOffset, int yOffset, int * cx, int * cy);
 

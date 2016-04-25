@@ -5,8 +5,9 @@
 #include <stdlib.h>
 
 #define SHARED_SIZE_LIMIT 1024
-
-__constant__ float const_histogram[60];
+#define HIST_BUCKETS 60
+//Histogram bucket size is 60, but give it 120 for objects (for now)
+__constant__ float const_histogram[120];
 
 __global__ void staticReverse(float *d, int n);
 
@@ -15,7 +16,7 @@ __global__ void gpuMeanShiftKernelForSubFrame(unsigned char * g_idata, float *g_
 
 __device__ void warpReduce(volatile float* shared_M00, volatile float* shared_M1x, volatile float* shared_M1y, int tid);
 
-void setConstantMemoryHistogram(float * histogram);
+void setConstantMemoryHistogram(float * histogram, int num_objects);
 
 // Below are my working kernels for now
 

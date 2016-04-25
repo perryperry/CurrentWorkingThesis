@@ -24,12 +24,8 @@ class SerialCamShift
 {
 
 public:
-    void createHistogramFullTest(unsigned char * entireHueArray, int step, RegionOfInterest cpu_objects[], float ** histogram, int num_objects);
-    
-    void createHistogram(unsigned char * hueArray, RegionOfInterest roi, float ** histogram, int num_objects);
-   
-    bool subMeanShift(unsigned char * hueArray, RegionOfInterest * roi, float * histogram, int * prevX, int * prevY);
-    
+    void createHistogram(unsigned char * entireHueArray, int step, RegionOfInterest cpu_objects[], float ** histogram, int num_objects);
+
     void printHistogram(float * histogram, int length);
     
     void backProjectHistogram(unsigned char * hsv, int step, Mat * frame, RegionOfInterest roi, float * histogram);

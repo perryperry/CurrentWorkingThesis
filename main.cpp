@@ -46,30 +46,33 @@ void parameterCheck(int argCount)
     }
 }
 
-int convertToHueArray(Mat frame, unsigned char ** hueArray, int * step)
+int calculateHueArrayLength(Mat frame, int * step)
 {
     Mat hsvMat;
     cvtColor(frame, hsvMat, CV_RGB2HSV);
-    //printf("\n **************** Lets see how many: %d, abs_width: %d or this width?: %d\n", (int)hsvMat.total(), size.width, hsvMat.cols);
     std::vector<cv::Mat> hsv_channels;
     split(hsvMat, hsv_channels);
     Mat hueMatrix = hsv_channels[0];
- //   *hueArray = (unsigned char *) malloc(sizeof(unsigned char) * hueMatrix.total());
-    *hueArray = (unsigned char * ) hueMatrix.data;
+    int total = hueMatrix.total();
     *step = hueMatrix.step;
-    return hueMatrix.total();
+    return total;
 }
 
-void convertToSubHue(Mat frame, RegionOfInterest roi, Mat * subHueFrame)
+int convertToHueArray(Mat frame, unsigned char ** hueArray)
 {
-    Mat hsv;
-    Mat subFrame = frame(Rect(roi.getTopLeftX(), roi.getTopLeftY(), roi._width, roi._height)).clone();
-    cvtColor(subFrame, hsv, CV_RGB2HSV);
+    Mat hsvMat;
+    cvtColor(frame, hsvMat, CV_RGB2HSV);
     std::vector<cv::Mat> hsv_channels;
-    split(hsv, hsv_channels);
-    *subHueFrame = hsv_channels[0];
+    split(hsvMat, hsv_channels);
+    Mat hueMatrix = hsv_channels[0];
+    int i = 0;
+    for(i = 0; i < hueMatrix.total(); i ++)
+    {
+        (*hueArray)[i]=(unsigned char) hueMatrix.data[i];
+    }
 }
 
+//For pthread testing
 void * test(void * data)
 {
     char * str;
@@ -194,57 +197,36 @@ int main(int argc, const char * argv[])
     /*************************************** End Testing Pthread *********************************************/
 
     
-    cap.read(frame);
-   
-    // time1 = high_resolution_clock::now();
-        
-    convertToSubHue(frame, cpu_objects[1], &subHueFrame);
-        
-    // time2 = high_resolution_clock::now();
-    // auto duration2 = duration_cast<microseconds>( time2 - time1 ).count();
-        
-    // cout << "Duration of preparing using subframe with converting to hsv: " << duration2 / 1000.0 << endl;
+    
     
     /************************************* First Frame initialize and process ****************************************/
-    unsigned char * hueArray = (unsigned char * ) subHueFrame.data;
+    cap.read(frame);
     float * histogram = (float *) calloc(sizeof(float), BUCKETS * num_objects);
-    float * histTEST = (float *) calloc(sizeof(float), BUCKETS * num_objects);
-    unsigned char * entireHueArray;
-    int totalHue = convertToHueArray(frame, &entireHueArray, &step);
-    
-    //camShift.createHistogram(hueArray, cpu_objects[1], &histTEST, num_objects); //old version
-    
-    camShift.createHistogramFullTest(entireHueArray, step, cpu_objects, &histogram, num_objects);
+    int totalHue = calculateHueArrayLength(frame, &step);
+    unsigned char * entireHueArray = (unsigned char *) malloc(sizeof(unsigned char) * totalHue);
+    convertToHueArray(frame, &entireHueArray);
+
+    camShift.createHistogram(entireHueArray, step, cpu_objects, &histogram, num_objects);
 
     mainConstantMemoryHistogramLoad(histogram, num_objects);
-
-    
-    for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
-        printf("OBJECT %d: (%d, %d)\n", obj_cur, cpu_objects[obj_cur].getCenterX(), cpu_objects[obj_cur].getCenterY());
-    }
-    
-    
-    
     
     //for testing
-    if(! shouldProcessVideo )
-    {
-        camShift.printHistogram(histTEST, BUCKETS * num_objects);
-        camShift.printHistogram(histogram, BUCKETS * num_objects);
+   // if(! shouldProcessVideo )
+   // {
+        
+        //camShift.printHistogram(histTEST, BUCKETS * num_objects);
+       // camShift.printHistogram(histogram, BUCKETS * num_objects);
        
         for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
             cpu_objects[obj_cur].drawCPU_ROI(&frame);
             gpu_objects[obj_cur].drawGPU_ROI(&frame);
         }
         outputVideo.write(frame);
-    }
+   // }
     
-   if( shouldProcessVideo )
-    {
-        int cx = gpu_objects[obj_cur].getCenterX(), cy = gpu_objects[obj_cur].getCenterY();
-        row_offset[0] = gpu_objects[obj_cur].getTopLeftY();
-        col_offset[0] = gpu_objects[obj_cur].getTopLeftX();
-        
+  
+    
+     /*
        if(shouldCPU){
           for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
            
@@ -271,20 +253,24 @@ int main(int argc, const char * argv[])
         printf("**************************************** Process the rest of the video ***********************************\n");
     
         outputVideo.write(frame);
+    */
     
+    
+  if( shouldProcessVideo )
+  {
+      row_offset[0] = gpu_objects[obj_cur].getTopLeftY();
+      col_offset[0] = gpu_objects[obj_cur].getTopLeftX();
+      int cx = gpu_objects[obj_cur].getCenterX(), cy = gpu_objects[obj_cur].getCenterY();
+      
+      initDeviceStruct(ds, entireHueArray, totalHue, &cx, &cy, col_offset, row_offset); //gpu device struct for kernel memory re-use
+
         while(cap.read(frame))
         {
-            for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
-                printf("OBJECT %d: (%d, %d)\n", obj_cur, cpu_objects[obj_cur].getCenterX(), cpu_objects[obj_cur].getCenterY());
-            }
-            
-            
-            totalHue = convertToHueArray(frame, &entireHueArray, &step);
+            totalHue = convertToHueArray(frame, &entireHueArray);
             /******************************** CPU MeanShift until Convergence ***************************************/
             if(shouldCPU)
             {
                for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
-               
                     cpu_cx = cpu_objects[obj_cur].getCenterX();
                     cpu_cy = cpu_objects[obj_cur].getCenterY();
                     cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
@@ -302,10 +288,10 @@ int main(int argc, const char * argv[])
             }
             /******************************** Write to Output Video *******************************************/
             if(shouldBackProjectFrame){
-                if(shouldCPU)
+               /* if(shouldCPU)
                     camShift.backProjectHistogram(hueArray, frame.step, &frame, cpu_objects[obj_cur], histogram);
                 if(shouldGPU)
-                    camShift.backProjectHistogram(hueArray, frame.step, &frame, gpu_objects[obj_cur], histogram);
+                    camShift.backProjectHistogram(hueArray, frame.step, &frame, gpu_objects[obj_cur], histogram);*/
             }
                
             outputVideo.write(frame);
@@ -318,13 +304,12 @@ int main(int argc, const char * argv[])
     //clean-up
     outputVideo.release();
     free(histogram);
-    free(histTEST);
     free(row_offset);
     free(col_offset);
     freeDeviceStruct(ds);
 	free(ds);
-    //free(entireHueArray);
+    free(entireHueArray);
     
-    printf("Program exiting\n");
+    printf("Program exited successfully\n");
     return 0;
 }

@@ -60,10 +60,10 @@ int convertToHueArray(Mat frame, unsigned char ** hueArray)
     return hueMatrix.total();
 }
 
-void printHueSum(unsigned char * entireHueArray, int totalHue)
+void printHueSum(unsigned char * entireHueArray, int hueLength)
 {
     long total = 0;
-    for(int i =0; i < totalHue; i++)
+    for(int i =0; i < hueLength; i++)
     {
         total += (int) entireHueArray[i];
     }
@@ -148,13 +148,13 @@ int main(int argc, const char * argv[])
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
     
-    int * gpu_cx = (int *) malloc(sizeof(int)); //centroid x for gpu
-    int * gpu_cy = (int *) malloc(sizeof(int)); //centroid y for gpu
+    int * gpu_cx = (int *) malloc(sizeof(int) * num_objects); //centroid x for gpu
+    int * gpu_cy = (int *) malloc(sizeof(int) * num_objects); //centroid y for gpu
     int cpu_cx = 0; //centroid x for cpu
     int cpu_cy = 0; //centroid x for cpu
     int step = 0; //The width of the entire frame
-    int * row_offset = (int *) malloc(sizeof(int)); //for gpu
-    int * col_offset = (int *) malloc(sizeof(int)); //for gpu
+    int * gpu_row_offset = (int *) malloc(sizeof(int) * num_objects); //for gpu
+    int * gpu_col_offset = (int *) malloc(sizeof(int) * num_objects); //for gpu
     SerialCamShift camShift;
     Mat frame, hsv;
     
@@ -188,8 +188,8 @@ int main(int argc, const char * argv[])
     /************************************* First Frame initialize and process ****************************************/
     cap.read(frame);
     float * histogram = (float *) calloc(sizeof(float), BUCKETS * num_objects);
-    int totalHue = calculateHueArrayLength(frame, &step);
-    unsigned char * entireHueArray = (unsigned char *) malloc(sizeof(unsigned char) * totalHue);
+    int hueLength = calculateHueArrayLength(frame, &step);
+    unsigned char * entireHueArray = (unsigned char *) malloc(sizeof(unsigned char) * hueLength);
     convertToHueArray(frame, &entireHueArray);
 
     camShift.createHistogram(entireHueArray, step, cpu_objects, &histogram, num_objects);
@@ -200,23 +200,22 @@ int main(int argc, const char * argv[])
     for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
         cpu_objects[obj_cur].drawCPU_ROI(&frame);
         gpu_objects[obj_cur].drawGPU_ROI(&frame);
+        //load gpu starting values as well
+        gpu_row_offset[obj_cur] = gpu_objects[obj_cur].getTopLeftY();
+        gpu_col_offset[obj_cur] = gpu_objects[obj_cur].getTopLeftX();
+        gpu_cx[obj_cur] = gpu_objects[obj_cur].getCenterX();
+        gpu_cy[obj_cur] = gpu_objects[obj_cur].getCenterY();
     }
     outputVideo.write(frame);
     
   if( shouldProcessVideo )
   {
-      obj_cur = 0;
-      row_offset[0] = gpu_objects[obj_cur].getTopLeftY();
-      col_offset[0] = gpu_objects[obj_cur].getTopLeftX();
-      gpu_cx[0] = gpu_objects[obj_cur].getCenterX();
-      gpu_cy[0] = gpu_objects[obj_cur].getCenterY();
-      
-      initDeviceStruct(ds, entireHueArray, totalHue, gpu_cx , gpu_cy, col_offset, row_offset); //gpu device struct for kernel memory re-use
+      initDeviceStruct(num_objects, ds, entireHueArray, hueLength, gpu_cx , gpu_cy, gpu_col_offset, gpu_row_offset); //gpu device struct for kernel memory re-use
 
         while(cap.read(frame))
         {
-           totalHue=convertToHueArray(frame, &entireHueArray);
-           //printHueSum(entireHueArray, totalHue);
+           hueLength = convertToHueArray(frame, &entireHueArray);
+           //printHueSum(entireHueArray, hueLength);
             /******************************** CPU MeanShift until Convergence ***************************************/
             if(shouldCPU)
             {
@@ -231,14 +230,10 @@ int main(int argc, const char * argv[])
             /******************************** GPU MeanShift until Convergence **********************************************/
             if(shouldGPU)
             {
-               // printf("Before: %d %d\n",gpu_cx[0], gpu_cy[0]);
-                
                 obj_cur = 0;
-                gpu_time_cost += launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_objects[obj_cur].getTotalPixels(), step, gpu_objects[obj_cur]._width, gpu_objects[obj_cur]._height, gpu_cx , gpu_cy, shouldPrint);
-                gpu_objects[obj_cur].setCentroid(Point(gpu_cx[0], gpu_cy[0]));
+                gpu_time_cost += launchTwoKernelReduction(obj_cur, num_objects, *ds, entireHueArray, hueLength, gpu_objects[obj_cur].getTotalPixels(), step, gpu_objects[obj_cur]._width, gpu_objects[obj_cur]._height, &gpu_cx , &gpu_cy, shouldPrint);
+                gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
                 gpu_objects[obj_cur].drawGPU_ROI(&frame);
-                
-                //printf("After: %d %d\n",gpu_cx[0], gpu_cy[0]);
             }
             /******************************** Write to Output Video *******************************************/
             if(shouldBackProjectFrame){
@@ -258,8 +253,8 @@ int main(int argc, const char * argv[])
     //clean-up
     outputVideo.release();
     free(histogram);
-    free(row_offset);
-    free(col_offset);
+    free(gpu_row_offset);
+    free(gpu_col_offset);
     freeDeviceStruct(ds);
 	free(ds);
     free(entireHueArray);

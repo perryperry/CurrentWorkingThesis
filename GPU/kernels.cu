@@ -71,12 +71,12 @@ So given the thread id (i.e. the sub_absolute_index), you can get those values a
 absolute index in the overall picture frame char *. 
 */
 
-__global__ void gpuBlockReduce(unsigned char *g_idata, float *g_odata, int subframe_length, int blockCount, int abs_width, int sub_width, int sub_height, int * row_offset, int * col_offset)
+__global__ void gpuBlockReduce(int obj_id, unsigned char *g_idata, float *g_odata, int subframe_length, int blockCount, int abs_width, int sub_width, int sub_height, int * row_offset, int * col_offset)
 {
   __shared__ float shared_M00[1024];
   __shared__ float shared_M1x[1024];
   __shared__ float shared_M1y[1024];
-
+  __shared__ int shared_hist_offset[1];
   // each thread loads one element from global to shared mem
   unsigned int tid = threadIdx.x;
   unsigned int i = blockIdx.x*blockDim.x + threadIdx.x; 
@@ -84,28 +84,21 @@ __global__ void gpuBlockReduce(unsigned char *g_idata, float *g_odata, int subfr
   unsigned int sub_row = 0;
   unsigned int absolute_index = 0;
 
-  /*if( i == 0 )
-  {
-     // printf("In GPU testKernel --> topX: %d topY: %d\n",col_offset[0], row_offset[0]);
-      int index = 0;
-      long total = 0;
-      for(index = 0; index < 777600; index ++)
-      {
-        total += index;
-      }
-      printf("TOTAL IN GPU IS: %ld\n", total);
-  }*/
-
+  if(tid == 0){
+        shared_hist_offset[0] =  obj_id * HIST_BUCKETS;
+  }
+  __syncthreads();
   if(i < subframe_length) 
   {
+      
       sub_col = i % sub_width;
       sub_row = i / sub_width;
 
-      absolute_index = (row_offset[0] * abs_width) + col_offset[0] + sub_col + (abs_width * sub_row);
+      absolute_index = (row_offset[obj_id] * abs_width) + col_offset[obj_id] + sub_col + (abs_width * sub_row);
       
-      shared_M00[tid] = const_histogram[ g_idata[absolute_index] / 3 ];
-      shared_M1x[tid] = ((float)(sub_col + col_offset[0])) * shared_M00[tid];
-      shared_M1y[tid] = ((float)(sub_row + row_offset[0])) * shared_M00[tid];
+      shared_M00[tid] = const_histogram[ (g_idata[absolute_index] / 3) + shared_hist_offset[0]];
+      shared_M1x[tid] = ((float)(sub_col + col_offset[obj_id])) * shared_M00[tid];
+      shared_M1y[tid] = ((float)(sub_row + row_offset[obj_id])) * shared_M00[tid];
   }
   else
   {
@@ -138,7 +131,7 @@ __global__ void gpuBlockReduce(unsigned char *g_idata, float *g_odata, int subfr
       g_odata[blockIdx.x + (2 * blockCount)] = shared_M1y[0]; 
     }
 }
-__global__ void gpuFinalReduce(float * g_odata, int * cx, int * cy, int * row_offset, int * col_offset, int sub_width, int sub_height, int num_block)
+__global__ void gpuFinalReduce(int obj_id, float * g_odata, int * cx, int * cy, int * row_offset, int * col_offset, int sub_width, int sub_height, int num_block)
 {
     extern __shared__ float shared_sum[];
     //unsigned int tid = threadIdx.x;
@@ -146,9 +139,9 @@ __global__ void gpuFinalReduce(float * g_odata, int * cx, int * cy, int * row_of
 
     if(i < num_block){
 
-      shared_sum[i] = g_odata[i];
-      shared_sum[i + num_block] = g_odata[i + num_block];
-      shared_sum[i + num_block + num_block] = g_odata[i + num_block + num_block];
+      shared_sum[i] = g_odata[i]; //M00
+      shared_sum[i + num_block] = g_odata[i + num_block]; //M1x
+      shared_sum[i + num_block + num_block] = g_odata[i + num_block + num_block];//M1y
 
     }
     __syncthreads();
@@ -171,14 +164,14 @@ __global__ void gpuFinalReduce(float * g_odata, int * cx, int * cy, int * row_of
       newX = (int) ((int)M1x / (int)M00);
       newY = (int) ((int)M1y / (int)M00);
 
-      col_offset[0] = newX - (sub_width / 2);
-      row_offset[0] = newY - (sub_height / 2);
+      col_offset[obj_id] = newX - (sub_width / 2);
+      row_offset[obj_id] = newY - (sub_height / 2);
 
-      if(col_offset[0] < 0) col_offset[0] = 0;
-      if(row_offset[0] < 0) row_offset[0] = 0;
+      if(col_offset[obj_id] < 0) col_offset[obj_id] = 0;
+      if(row_offset[obj_id] < 0) row_offset[obj_id] = 0;
 
-      cx[0] = newX;
-      cy[0] = newY;
+      cx[obj_id] = newX;
+      cy[obj_id] = newY;
     // printf("\nIn gpuFinalReduce: M00:%lf M1x:%lf M1y: %lf, NewX: %d NewY: %d \n", M00, M1x, M1y, newX, newY);
     }
 }

@@ -15,7 +15,7 @@ struct device_struct {
     unsigned char * d_frame;
 }; typedef struct device_struct d_struct;
 
-void initDeviceStruct(d_struct * ds, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset);
+void initDeviceStruct(int num_objects, d_struct * ds, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset);
 
 void freeDeviceStruct(d_struct * ds);
 
@@ -29,7 +29,7 @@ float cpuReduce(float * h_in, int n);
 
 void mainConstantMemoryHistogramLoad(float * histogram, int num_objects);
 
-float launchTwoKernelReduction(d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int * cx, int * cy, bool shouldPrint);
+float launchTwoKernelReduction(int obj_id, int num_objects, d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int ** cx, int ** cy, bool shouldPrint);
 
 int gpuDistance(int x1, int y1, int x2, int y2);
 

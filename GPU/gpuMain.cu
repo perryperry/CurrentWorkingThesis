@@ -69,7 +69,7 @@ void mainConstantMemoryHistogramLoad(float * histogram, int num_objects)
   setConstantMemoryHistogram(histogram, num_objects);
 }
 
-void initDeviceStruct(d_struct * ds, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset)
+void initDeviceStruct(int num_objects, d_struct * ds, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset)
 {
     cudaError_t err; 
     int * d_cx;
@@ -81,18 +81,18 @@ void initDeviceStruct(d_struct * ds, unsigned char * frame, int frameLength, int
     if(( err = cudaMalloc((void **)&d_frame, frameLength * sizeof(unsigned char))) != cudaSuccess)
           printf("%s\n", cudaGetErrorString(err));
     err = cudaMemcpy(d_frame, frame, frameLength * sizeof(unsigned char), cudaMemcpyHostToDevice);  
-    if((err = cudaMalloc((void **)&d_cx, sizeof(int))) != cudaSuccess) 
+    if((err = cudaMalloc((void **)&d_cx, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
-    err = cudaMemcpy(d_cx, cx, sizeof(int), cudaMemcpyHostToDevice);
-    if((err = cudaMalloc((void **)&d_cy, sizeof(int))) != cudaSuccess) 
+    err = cudaMemcpy(d_cx, cx, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
+    if((err = cudaMalloc((void **)&d_cy, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
-    err = cudaMemcpy(d_cy, cy, sizeof(int), cudaMemcpyHostToDevice);
-    if((err = cudaMalloc((void **)&d_row_offset, sizeof(int))) != cudaSuccess) 
+    err = cudaMemcpy(d_cy, cy, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
+    if((err = cudaMalloc((void **)&d_row_offset, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
-    err = cudaMemcpy(d_row_offset, row_offset, sizeof(int), cudaMemcpyHostToDevice);
-    if((err = cudaMalloc((void **)&d_col_offset, sizeof(int))) != cudaSuccess) 
+    err = cudaMemcpy(d_row_offset, row_offset, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
+    if((err = cudaMalloc((void **)&d_col_offset, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
-    err = cudaMemcpy(d_col_offset, col_offset, sizeof(int), cudaMemcpyHostToDevice);
+    err = cudaMemcpy(d_col_offset, col_offset, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
 
     (*ds).d_frame = d_frame;
     (*ds).d_cx = d_cx;
@@ -110,8 +110,8 @@ void freeDeviceStruct(d_struct * ds)
     cudaFree((*ds).d_col_offset);
 }
 
-
-float launchTwoKernelReduction(d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int * cx, int * cy, bool shouldPrint)
+//For single object tracking
+float launchTwoKernelReduction(int obj_id, int num_objects, d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int ** cx, int ** cy, bool shouldPrint)
 {
     float time = 0;
     // printf("\nInside Launching GPU MeanShift for entire frame...\n");
@@ -127,10 +127,10 @@ float launchTwoKernelReduction(d_struct ds, unsigned char * frame, int frameLeng
     cudaEventCreate(&launch_begin);
     cudaEventCreate(&launch_end);
     cudaEventRecord(launch_begin,0);
-    int * h_cx = (int *) malloc(sizeof(int));
-    int * h_cy = (int *) malloc(sizeof(int));
-    h_cx[0] = cx[0];
-    h_cy[0] = cy[0];
+    int * h_cx = (int *) malloc(sizeof(int) * num_objects);
+    int * h_cy = (int *) malloc(sizeof(int) * num_objects);
+    h_cx[obj_id] = (*cx)[obj_id];
+    h_cy[obj_id] = (*cy)[obj_id];
     //Make d_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
     float * d_out;
     if((err = cudaMalloc((void **)&d_out, 3 * num_block * sizeof(float)))!= cudaSuccess)
@@ -146,37 +146,36 @@ float launchTwoKernelReduction(d_struct ds, unsigned char * frame, int frameLeng
     cudaEventCreate(&launch_end);
     cudaEventRecord(launch_begin,0);
 
-
     err = cudaMemcpy(ds.d_frame, frame, frameLength * sizeof(unsigned char), cudaMemcpyHostToDevice);
 
     if(num_block <= tile_width)
     {
 
-      while(gpuDistance(prevX, prevY, h_cx[0], h_cy[0]) > 1){
+      while(gpuDistance(prevX, prevY, h_cx[obj_id], h_cy[obj_id]) > 1){
+        if(shouldPrint)
+          printf("PrevX vs NewX(%d, %d) and PrevY vs NewY(%d, %d)\n", prevX, h_cx[obj_id], prevY, h_cy[obj_id]);
+        prevX = h_cx[obj_id];
+        prevY = h_cy[obj_id];
 
-      prevX = h_cx[0];
-      prevY = h_cy[0];
+        gpuBlockReduce<<< grid, block >>>(obj_id, ds.d_frame, d_out, subFrameLength, num_block, abs_width, sub_width, sub_height, ds.d_row_offset, ds.d_col_offset);
+        gpuFinalReduce<<< 1, num_block, dynamic_sharedMem_size >>>(obj_id, d_out, ds.d_cx, ds.d_cy, ds.d_row_offset, ds.d_col_offset, sub_width, sub_height, num_block);
 
-      gpuBlockReduce<<< grid, block >>>(ds.d_frame, d_out, subFrameLength, num_block, abs_width, sub_width, sub_height, ds.d_row_offset, ds.d_col_offset);
-      gpuFinalReduce<<< 1, num_block, dynamic_sharedMem_size >>>(d_out, ds.d_cx, ds.d_cy, ds.d_row_offset, ds.d_col_offset, sub_width, sub_height, num_block);
-
-      err =  cudaMemcpy(h_cx, ds.d_cx, sizeof(int), cudaMemcpyDeviceToHost);
-      err =  cudaMemcpy(h_cy, ds.d_cy, sizeof(int), cudaMemcpyDeviceToHost);
-     
-      if(shouldPrint)
-     	  printf("PrevX vs NewX(%d, %d) and PrevY vs NewY(%d, %d)\n", prevX, h_cx[0], prevY, h_cy[0]);
-
+        err =  cudaMemcpy(h_cx, ds.d_cx, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+        err =  cudaMemcpy(h_cy, ds.d_cy, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
     }
     cudaDeviceSynchronize();
     cudaEventRecord(launch_end,0);
     cudaEventSynchronize(launch_end);
     cudaEventElapsedTime(&time, launch_begin, launch_end);
+    if(shouldPrint)
+          printf("***** GPU FINISHED FRAME: PrevX vs NewX(%d, %d) and PrevY vs NewY(%d, %d)\n", prevX, h_cx[obj_id], prevY, h_cy[obj_id]);
+
   }
   else
     printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", num_block, tile_width);
 
-    cx[0] = h_cx[0];
-    cy[0] = h_cy[0];
+    (*cx)[obj_id] = h_cx[obj_id];
+    (*cy)[obj_id] = h_cy[obj_id];
 
     cudaFree(d_out);
     free(h_out);

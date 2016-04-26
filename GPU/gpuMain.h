@@ -29,9 +29,9 @@ float cpuReduce(float * h_in, int n);
 
 void mainConstantMemoryHistogramLoad(float * histogram, int num_objects);
 
-int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLength, int width, int xOffset, int yOffset, int * cx, int * cy);
-
 float launchTwoKernelReduction(d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int * cx, int * cy, bool shouldPrint);
+
+int gpuDistance(int x1, int y1, int x2, int y2);
 
 #endif
 

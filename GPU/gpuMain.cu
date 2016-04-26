@@ -1,7 +1,6 @@
 #include "gpuMain.h"
 #include "kernels.h"
 
-#define LEVELS 5
 #define THRESH 2
 
 float * fillArray(int n)
@@ -62,96 +61,6 @@ void reverseIt(float * histogram)
 
     cudaFree(d_hist);
 }
-
-
-
-/*
-  This function and it's kernel are probably obsolete at this point, but leaving them in just in case.
-
-  Obsolete because it requires a hueFrame of only the search window hues and not the entire frame.
-  Limited, in that the frame must be reset between iterations, I'd have to remove the cudaMallocs and reuse a statically sized
-  search window to make use of this. It also would perclude the opportunity of extending for multiple objects
-*/
-
-int launchMeanShiftKernelForSubFrame(unsigned char * hueFrame, int hueFrameLength, int width, int xOffset, int yOffset, int * cx, int * cy)
-{
-  printf("\nInside Launching GPU MeanShift...\n");
-
- 
-   unsigned char * d_in;
-
-    cudaError_t err = cudaMalloc((void **)&d_in, hueFrameLength * sizeof(unsigned char)); 
-    if(err != cudaSuccess)
-        printf("%s\n", cudaGetErrorString(err));
-
-    err = cudaMemcpy(d_in, hueFrame, hueFrameLength * sizeof(unsigned char), cudaMemcpyHostToDevice);
-
-    cudaEvent_t launch_begin, launch_end;
-    int tile_width = 1024;
-    int num_block = ceil( (float) hueFrameLength / (float) tile_width);
-    dim3 block(tile_width, 1, 1);
-    dim3 grid(num_block, 1, 1);
-
-    //Make d_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
-    float * d_out;
-    err = cudaMalloc((void **)&d_out, 3 * num_block * sizeof(float)); 
-    if(err != cudaSuccess)
-        printf("%s\n", cudaGetErrorString(err));
-
-      int * readyArray;
-    err = cudaMalloc((void **)&readyArray, num_block * sizeof(int)); 
-    if(err != cudaSuccess)
-        printf("%s\n", cudaGetErrorString(err));
-      cudaMemset(readyArray, 0, sizeof(int) * num_block ); 
-
-    //Make h_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
-    float * h_out = (float *) malloc(3 * num_block * sizeof(float));
-
-  printf("Num_block: %d vs tile_width %d\n", num_block, tile_width);
-
-
-    if(num_block <= tile_width){
-
-     cudaEventCreate(&launch_begin);
-     cudaEventCreate(&launch_end);
-
-     cudaEventRecord(launch_begin,0);
-
-    gpuMeanShiftKernelForSubFrame<<< grid, block >>>(d_in, d_out, readyArray, hueFrameLength, num_block, width, xOffset, yOffset);
-      
-
-    err =  cudaMemcpy(h_out, d_out, 3 * num_block * sizeof(float), cudaMemcpyDeviceToHost);
-
-
-     cudaEventRecord(launch_end,0);
-    cudaEventSynchronize(launch_end);
-
-    float time = 0;
-    cudaEventElapsedTime(&time, launch_begin, launch_end);
-
-    printf("GPU time cost in milliseconds for improved meanshift kernel with atomic add: %f\n", time);
-    printf("improved meanshift kernel with atomic add total: M00 = %f M1x = %f M1y = %f \n", h_out[0], h_out[num_block], h_out[num_block * 2]);
-
-    //cpuReduce(h_out, num_block);
-
-   //  printArray(h_out, num_block);
-
-  }
-  else
-    printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", num_block, tile_width);
-
-
-    cudaFree(d_out);
-    cudaFree(readyArray);
-    free(h_out);
-    cudaFree(d_in);
-
-    return 1;
-}
-
-
-//***********************************************************************************************//
-// Below launches new improved kernel stuff
 
 //wrapper function because constant memory must be in the same file that accesses it, linking issue
 void mainConstantMemoryHistogramLoad(float * histogram, int num_objects)
@@ -220,8 +129,8 @@ float launchTwoKernelReduction(d_struct ds, unsigned char * frame, int frameLeng
     cudaEventRecord(launch_begin,0);
     int * h_cx = (int *) malloc(sizeof(int));
     int * h_cy = (int *) malloc(sizeof(int));
-    h_cx[0] = -1;
-    h_cy[0] = -1;
+    h_cx[0] = cx[0];
+    h_cy[0] = cy[0];
     //Make d_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
     float * d_out;
     if((err = cudaMalloc((void **)&d_out, 3 * num_block * sizeof(float)))!= cudaSuccess)
@@ -243,7 +152,7 @@ float launchTwoKernelReduction(d_struct ds, unsigned char * frame, int frameLeng
     if(num_block <= tile_width)
     {
 
-    while(prevX != h_cx[0] && prevY != h_cy[1]){
+      while(gpuDistance(prevX, prevY, h_cx[0], h_cy[0]) > 1){
 
       prevX = h_cx[0];
       prevY = h_cy[0];
@@ -255,7 +164,7 @@ float launchTwoKernelReduction(d_struct ds, unsigned char * frame, int frameLeng
       err =  cudaMemcpy(h_cy, ds.d_cy, sizeof(int), cudaMemcpyDeviceToHost);
      
       if(shouldPrint)
-     	printf("PrevX vs NewX(%d, %d) and PrevY vs NewY(%d, %d)\n", prevX, h_cx[0], prevY, h_cy[0]);
+     	  printf("PrevX vs NewX(%d, %d) and PrevY vs NewY(%d, %d)\n", prevX, h_cx[0], prevY, h_cy[0]);
 
     }
     cudaDeviceSynchronize();
@@ -266,13 +175,25 @@ float launchTwoKernelReduction(d_struct ds, unsigned char * frame, int frameLeng
   else
     printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", num_block, tile_width);
 
-    *cx = h_cx[0];
-    *cy = h_cy[0];
+    cx[0] = h_cx[0];
+    cy[0] = h_cy[0];
 
     cudaFree(d_out);
     free(h_out);
     free(h_cx);
     free(h_cy);
 
+    if(shouldPrint)
+      printf("Finished GPU Frame\n");
     return time;
+}
+
+int gpuDistance(int x1, int y1, int x2, int y2)
+{
+    int distx = (x2 - x1) * (x2 - x1);
+    int disty = (y2 - y1) * (y2 - y1);
+    
+    double dist = sqrt(distx + disty);
+    
+    return (int) dist;
 }

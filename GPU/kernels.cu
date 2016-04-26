@@ -17,101 +17,6 @@ __global__ void staticReverse(float *d, int n)
 }
 /**********************************************************************************************************/
 
-//New improved kernels below
-
-
-
-__global__ void gpuMeanShiftKernelForSubFrame(unsigned char *g_idata, float *g_odata, int * readyArray, int input_length, int blockCount, int width, int xOffset, int yOffset)
-{
-  __shared__ float shared_M00[1024];
-  __shared__ float shared_M1x[1024];
-  __shared__ float shared_M1y[1024];
-
-  // each thread loads one element from global to shared mem
-  unsigned int tid = threadIdx.x;
-  unsigned int i = blockIdx.x*blockDim.x + threadIdx.x; 
-  unsigned int col = 0;
-  unsigned int row = 0;
-
-  shared_M00[tid] = (i < input_length) ? const_histogram[ g_idata[i] / 3 ] : 0;
-
-  if(i < input_length)
-  {
-      col = i % width;
-      row = i / width;
-
-      shared_M1x[tid] = ((float)(col + xOffset)) * shared_M00[tid]; //const_histogram[ g_idata[i] / 3 ];//
-      shared_M1y[tid] = ((float)(row + yOffset)) * shared_M00[tid]; //const_histogram[ g_idata[i]/ 3 ];//
-  }
-  else
-  {
-       shared_M1x[tid] = 0;
-       shared_M1y[tid] = 0;
-  }
-
-    __syncthreads();
-
-    for (unsigned int s=blockDim.x/2; s > 32; s >>= 1) 
-    { 
-      if (tid < s)
-      {
-        shared_M00[tid] += shared_M00[tid + s]; 
-        shared_M1x[tid] += shared_M1x[tid + s]; 
-        shared_M1y[tid] += shared_M1y[tid + s]; 
-      }
-      __syncthreads(); 
-    }
-
-    if(tid < 32){
-      /*warpReduce(shared_M00, tid);
-      warpReduce(shared_M1x, tid);
-      warpReduce(shared_M1y, tid);*/
-       warpReduce(shared_M00, shared_M1x, shared_M1y, tid);
-    }
-
-    // write result for this block to global mem
-    if (tid == 0) {
-      g_odata[blockIdx.x] = shared_M00[0]; 
-      g_odata[blockIdx.x + blockCount] = shared_M1x[0]; 
-      g_odata[blockIdx.x + (2 * blockCount)] = shared_M1y[0]; 
-
-
-      readyArray[blockIdx.x] = 1;
-    }
-
-    if( blockIdx.x == 0 && tid < blockCount ) // summation of global out across blocks
-    {
-      int index = 0;
-      int M1yOffset = 2 * blockCount;
-
-      while(atomicAdd(&readyArray[tid], 0) == 0);
-
-      shared_M00[tid] = g_odata[tid];
-      shared_M1x[tid] = g_odata[tid + blockCount];
-      shared_M1y[tid] = g_odata[tid + M1yOffset];
-
-      __syncthreads(); 
-
-      if(tid == 0)
-      {
-        float M00 = 0.0;
-        float M1x = 0.0;
-        float M1y = 0.0;
-
-        for(index = 0; index < blockCount; index ++)
-        {
-          M00 += shared_M00[index];
-          M1x += shared_M1x[index];
-          M1y += shared_M1y[index];
-        }
-
-        g_odata[0] = M00;
-        g_odata[blockCount] = M1x;
-        g_odata[M1yOffset] = M1y;
-      }
-    }
-}
-
 __device__ void warpReduceSingleMatrix(volatile float* sdata, int tid) 
 { 
   sdata[tid] += sdata[tid + 32];
@@ -179,10 +84,17 @@ __global__ void gpuBlockReduce(unsigned char *g_idata, float *g_odata, int subfr
   unsigned int sub_row = 0;
   unsigned int absolute_index = 0;
 
-  if( i == 0 )
+  /*if( i == 0 )
   {
-     // printf("In GPU testKernel --> topX: %d topY: %d\n",col_offset[0], row_offset[0] );
-  }
+     // printf("In GPU testKernel --> topX: %d topY: %d\n",col_offset[0], row_offset[0]);
+      int index = 0;
+      long total = 0;
+      for(index = 0; index < 777600; index ++)
+      {
+        total += index;
+      }
+      printf("TOTAL IN GPU IS: %ld\n", total);
+  }*/
 
   if(i < subframe_length) 
   {
@@ -261,12 +173,13 @@ __global__ void gpuFinalReduce(float * g_odata, int * cx, int * cy, int * row_of
 
       col_offset[0] = newX - (sub_width / 2);
       row_offset[0] = newY - (sub_height / 2);
+
       if(col_offset[0] < 0) col_offset[0] = 0;
       if(row_offset[0] < 0) row_offset[0] = 0;
 
       cx[0] = newX;
       cy[0] = newY;
-     // printf("\nIn gpuFinalReduce: M00:%lf M1x:%lf M1y: %lf, NewX: %d NewY: %d \n", M00, M1x, M1y, newX, newY);
+    // printf("\nIn gpuFinalReduce: M00:%lf M1x:%lf M1y: %lf, NewX: %d NewY: %d \n", M00, M1x, M1y, newX, newY);
     }
 }
 
@@ -380,8 +293,8 @@ __global__ void gpuSingleKernelMeanShift(unsigned char *g_idata, float *g_odata,
         if(col_offset[0] < 0) col_offset[0] = 0;
         if(row_offset[0] < 0) row_offset[0] = 0;
         
-       printf("Inside GPU MeanShift ---> M00 = %f M1x = %f M1y = %f\n", M00, M1x, M1y);
-       printf("Inside GPU MeanShift ---> centroid (%d, %d)  topX, topY (%d,%d)\n", newX, newY, col_offset[0], row_offset[0]  );
+      // printf("Inside GPU MeanShift ---> M00 = %f M1x = %f M1y = %f\n", M00, M1x, M1y);
+     //  printf("Inside GPU MeanShift ---> centroid (%d, %d)  topX, topY (%d,%d)\n", newX, newY, col_offset[0], row_offset[0]  );
       }
 }
 }

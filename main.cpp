@@ -57,7 +57,19 @@ int convertToHueArray(Mat frame, unsigned char ** hueArray)
     {
         (*hueArray)[i]=(unsigned char) hueMatrix.data[i];
     }
+    return hueMatrix.total();
 }
+
+void printHueSum(unsigned char * entireHueArray, int totalHue)
+{
+    long total = 0;
+    for(int i =0; i < totalHue; i++)
+    {
+        total += (int) entireHueArray[i];
+    }
+    printf("Total Hue Sum in CPU: %ld\n", total);
+}
+
 
 //For pthread testing
 void * test(void * data)
@@ -136,17 +148,15 @@ int main(int argc, const char * argv[])
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
     
-    int gpu_cx = 0; //centroid x for gpu
-    int gpu_cy = 0; //centroid y for gpu
+    int * gpu_cx = (int *) malloc(sizeof(int)); //centroid x for gpu
+    int * gpu_cy = (int *) malloc(sizeof(int)); //centroid y for gpu
     int cpu_cx = 0; //centroid x for cpu
     int cpu_cy = 0; //centroid x for cpu
     int step = 0; //The width of the entire frame
     int * row_offset = (int *) malloc(sizeof(int)); //for gpu
     int * col_offset = (int *) malloc(sizeof(int)); //for gpu
     SerialCamShift camShift;
-    
     Mat frame, hsv;
-    Mat subHueFrame;
     
     /*************************************** Open Output VideoWriter *********************************************/
     //Code for opening VideoWriter taken from http://docs.opencv.org/3.1.0/d7/d9e/tutorial_video_write.html#gsc.tab=0
@@ -169,12 +179,12 @@ int main(int argc, const char * argv[])
 
      /*************************************** Testing Pthread *********************************************/
     
-    
   /*   pthread_t thread1, thread2;
      pthread_create(&thread1, NULL, test, (void *)"Keeping it trillion from thread 1.\n");
      pthread_create(&thread2, NULL, test, (void *)"Keeping it trillion from thread 2.\n");
     
      pthread_join(thread1, NULL);*/
+    
     /************************************* First Frame initialize and process ****************************************/
     cap.read(frame);
     float * histogram = (float *) calloc(sizeof(float), BUCKETS * num_objects);
@@ -185,7 +195,7 @@ int main(int argc, const char * argv[])
     camShift.createHistogram(entireHueArray, step, cpu_objects, &histogram, num_objects);
 
     mainConstantMemoryHistogramLoad(histogram, num_objects);
-    
+
     //For the initial frame, just render the initial search windows' positions
     for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
         cpu_objects[obj_cur].drawCPU_ROI(&frame);
@@ -195,23 +205,25 @@ int main(int argc, const char * argv[])
     
   if( shouldProcessVideo )
   {
+      obj_cur = 0;
       row_offset[0] = gpu_objects[obj_cur].getTopLeftY();
       col_offset[0] = gpu_objects[obj_cur].getTopLeftX();
-      gpu_cx = gpu_objects[obj_cur].getCenterX();
-      gpu_cy = gpu_objects[obj_cur].getCenterY();
+      gpu_cx[0] = gpu_objects[obj_cur].getCenterX();
+      gpu_cy[0] = gpu_objects[obj_cur].getCenterY();
       
-      initDeviceStruct(ds, entireHueArray, totalHue, &gpu_cx , &gpu_cy, col_offset, row_offset); //gpu device struct for kernel memory re-use
+      initDeviceStruct(ds, entireHueArray, totalHue, gpu_cx , gpu_cy, col_offset, row_offset); //gpu device struct for kernel memory re-use
 
         while(cap.read(frame))
         {
-            totalHue = convertToHueArray(frame, &entireHueArray);
+           totalHue=convertToHueArray(frame, &entireHueArray);
+           //printHueSum(entireHueArray, totalHue);
             /******************************** CPU MeanShift until Convergence ***************************************/
             if(shouldCPU)
             {
                for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
                     cpu_cx = cpu_objects[obj_cur].getCenterX();
                     cpu_cy = cpu_objects[obj_cur].getCenterY();
-                    cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
+                    cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, false /*shouldPrint*/, &cpu_cx, &cpu_cy);
                     cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
                     cpu_objects[obj_cur].drawCPU_ROI(&frame);
               }
@@ -219,9 +231,14 @@ int main(int argc, const char * argv[])
             /******************************** GPU MeanShift until Convergence **********************************************/
             if(shouldGPU)
             {
-                gpu_time_cost += launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_objects[obj_cur].getTotalPixels(), step, gpu_objects[obj_cur]._width, gpu_objects[obj_cur]._height, &gpu_cx , &gpu_cy, shouldPrint);
-                gpu_objects[obj_cur].setCentroid(Point(gpu_cx , gpu_cy));
+               // printf("Before: %d %d\n",gpu_cx[0], gpu_cy[0]);
+                
+                obj_cur = 0;
+                gpu_time_cost += launchTwoKernelReduction(*ds, entireHueArray, totalHue, gpu_objects[obj_cur].getTotalPixels(), step, gpu_objects[obj_cur]._width, gpu_objects[obj_cur]._height, gpu_cx , gpu_cy, shouldPrint);
+                gpu_objects[obj_cur].setCentroid(Point(gpu_cx[0], gpu_cy[0]));
                 gpu_objects[obj_cur].drawGPU_ROI(&frame);
+                
+                //printf("After: %d %d\n",gpu_cx[0], gpu_cy[0]);
             }
             /******************************** Write to Output Video *******************************************/
             if(shouldBackProjectFrame){
@@ -246,7 +263,8 @@ int main(int argc, const char * argv[])
     freeDeviceStruct(ds);
 	free(ds);
     free(entireHueArray);
-    
+    free(gpu_cx);
+    free(gpu_cy);
     printf("Program exited successfully\n");
     return 0;
 }

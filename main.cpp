@@ -108,6 +108,11 @@ void menu(int * num_objects, bool * processVid, bool * cpu, bool * gpu, bool * p
 
 int main(int argc, const char * argv[])
 {
+    
+    //timeMemoryTransfer();
+    //exit(1);
+    
+    
     bool shouldProcessVideo = false;
     bool shouldCPU = false;
     bool shouldGPU = false;
@@ -150,6 +155,24 @@ int main(int argc, const char * argv[])
     
     int * gpu_cx = (int *) malloc(sizeof(int) * num_objects); //centroid x for gpu
     int * gpu_cy = (int *) malloc(sizeof(int) * num_objects); //centroid y for gpu
+    
+    
+    
+    
+    //For multi-object test
+    int * obj_block_ends = (int *) malloc(sizeof(int) * num_objects); //ending block of each object in kernel
+    int * subFrameLengths = (int *) malloc(sizeof(int) * num_objects);;
+    int * sub_widths = (int *) malloc(sizeof(int) * num_objects);;
+    int * sub_heights = (int *) malloc(sizeof(int) * num_objects);
+    
+    for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
+       subFrameLengths[obj_cur] = gpu_objects[obj_cur].getTotalPixels();
+        printf("In Main: %d\n", subFrameLengths[obj_cur]);
+       sub_widths[obj_cur] = gpu_objects[obj_cur]._width;
+       sub_heights[obj_cur] = gpu_objects[obj_cur]._height;
+    }
+    
+    
     int cpu_cx = 0; //centroid x for cpu
     int cpu_cy = 0; //centroid x for cpu
     int step = 0; //The width of the entire frame
@@ -210,19 +233,20 @@ int main(int argc, const char * argv[])
     
   if( shouldProcessVideo )
   {
-      initDeviceStruct(num_objects, ds, entireHueArray, hueLength, gpu_cx , gpu_cy, gpu_col_offset, gpu_row_offset); //gpu device struct for kernel memory re-use
+      initDeviceStruct(num_objects, ds, entireHueArray, hueLength, gpu_cx , gpu_cy, gpu_col_offset, gpu_row_offset, subFrameLengths, sub_widths, sub_heights); //gpu device struct for kernel memory re-use
 
-        while(cap.read(frame))
-        {
+     while(cap.read(frame))
+      {
            hueLength = convertToHueArray(frame, &entireHueArray);
            //printHueSum(entireHueArray, hueLength);
             /******************************** CPU MeanShift until Convergence ***************************************/
             if(shouldCPU)
             {
-               for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
+               for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+               {
                     cpu_cx = cpu_objects[obj_cur].getCenterX();
                     cpu_cy = cpu_objects[obj_cur].getCenterY();
-                    cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, false /*shouldPrint*/, &cpu_cx, &cpu_cy);
+                    cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
                     cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
                     cpu_objects[obj_cur].drawCPU_ROI(&frame);
               }
@@ -230,10 +254,20 @@ int main(int argc, const char * argv[])
             /******************************** GPU MeanShift until Convergence **********************************************/
             if(shouldGPU)
             {
-                obj_cur = 0;
+               /* obj_cur = 1;
                 gpu_time_cost += launchTwoKernelReduction(obj_cur, num_objects, *ds, entireHueArray, hueLength, gpu_objects[obj_cur].getTotalPixels(), step, gpu_objects[obj_cur]._width, gpu_objects[obj_cur]._height, &gpu_cx , &gpu_cy, shouldPrint);
                 gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
-                gpu_objects[obj_cur].drawGPU_ROI(&frame);
+                gpu_objects[obj_cur].drawGPU_ROI(&frame);*/
+                
+                
+              gpu_time_cost += launchMultiObjectTwoKernelReduction(num_objects, obj_block_ends, *ds, entireHueArray, hueLength, step, sub_widths, sub_heights,  &gpu_cx, &gpu_cy, shouldPrint, subFrameLengths);
+                
+                for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+                {
+                    gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
+                    gpu_objects[obj_cur].drawGPU_ROI(&frame);
+                }
+                
             }
             /******************************** Write to Output Video *******************************************/
             if(shouldBackProjectFrame){
@@ -241,13 +275,17 @@ int main(int argc, const char * argv[])
                     camShift.backProjectHistogram(hueArray, frame.step, &frame, cpu_objects[obj_cur], histogram);
                 if(shouldGPU)
                     camShift.backProjectHistogram(hueArray, frame.step, &frame, gpu_objects[obj_cur], histogram);*/
-            }
+           }
                
             outputVideo.write(frame);
             
-        }//end while
-        printf("GPU average time cost in milliseconds: %f\n", gpu_time_cost / ((float) totalFrames));
-        printf("CPU average time cost in milliseconds: %f\n", cpu_time_cost / ((float) totalFrames));
+     }//end while
+        float gpu_average_time_cost = gpu_time_cost / ((float) totalFrames);
+        float cpu_average_time_cost = cpu_time_cost / ((float) totalFrames);
+        printf("GPU average time cost in milliseconds: %f\n", gpu_average_time_cost);
+        printf("CPU average time cost in milliseconds: %f\n", cpu_average_time_cost);
+        if(shouldGPU)
+            printf("Speed-up: %f\n", cpu_average_time_cost/ gpu_average_time_cost);
     }// end if shouldProcessVideo
     
     //clean-up
@@ -260,6 +298,14 @@ int main(int argc, const char * argv[])
     free(entireHueArray);
     free(gpu_cx);
     free(gpu_cy);
+    
+    
+    free(subFrameLengths);
+    free(sub_widths);
+    free(sub_heights);
+    free(obj_block_ends);
+    
+    
     printf("Program exited successfully\n");
     return 0;
 }

@@ -1,7 +1,41 @@
 #include "gpuMain.h"
 #include "kernels.h"
 
-#define THRESH 2
+
+void timeMemoryTransfer()
+{
+	float time = 0;
+	cudaError_t err; 
+	int num = 4;
+	int * h_array = (int * )malloc(sizeof(int) * num);
+	int * d_array;
+	if(( err = cudaMalloc((void **)&d_array, num * sizeof(int))) != cudaSuccess)
+          printf("%s\n", cudaGetErrorString(err));
+
+   cudaEvent_t launch_begin, launch_end;
+      
+
+	cudaEventCreate(&launch_begin);
+    cudaEventCreate(&launch_end);
+    cudaEventRecord(launch_begin,0);
+
+     err =  cudaMemcpy(h_array, d_array, sizeof(int) * num, cudaMemcpyDeviceToHost);
+
+ 	cudaDeviceSynchronize();
+    cudaEventRecord(launch_end,0);
+    cudaEventSynchronize(launch_end);
+    cudaEventElapsedTime(&time, launch_begin, launch_end);
+
+
+
+    printf("Time to transfer from gpu to cpu %d elements: %f\n", num, time);
+
+
+
+
+      free(h_array);
+      cudaFree(d_array);
+}
 
 float * fillArray(int n)
 {
@@ -69,36 +103,63 @@ void mainConstantMemoryHistogramLoad(float * histogram, int num_objects)
   setConstantMemoryHistogram(histogram, num_objects);
 }
 
-void initDeviceStruct(int num_objects, d_struct * ds, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset)
+void initDeviceStruct(int num_objects, d_struct * ds, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset, int * sub_lengths, int * sub_widths, int * sub_heights)
 {
     cudaError_t err; 
     int * d_cx;
     int * d_cy;
     int * d_col_offset;
     int * d_row_offset;
+    int * d_obj_block_ends;
+    int * d_sub_widths;
+    int * d_sub_lengths;
+    int * d_sub_heights;
     unsigned char * d_frame;
 
     if(( err = cudaMalloc((void **)&d_frame, frameLength * sizeof(unsigned char))) != cudaSuccess)
           printf("%s\n", cudaGetErrorString(err));
-    err = cudaMemcpy(d_frame, frame, frameLength * sizeof(unsigned char), cudaMemcpyHostToDevice);  
+    err = cudaMemcpy(d_frame, frame, frameLength * sizeof(unsigned char), cudaMemcpyHostToDevice); 
+
     if((err = cudaMalloc((void **)&d_cx, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
     err = cudaMemcpy(d_cx, cx, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
+
     if((err = cudaMalloc((void **)&d_cy, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
     err = cudaMemcpy(d_cy, cy, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
+
     if((err = cudaMalloc((void **)&d_row_offset, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
     err = cudaMemcpy(d_row_offset, row_offset, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
+
     if((err = cudaMalloc((void **)&d_col_offset, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
     err = cudaMemcpy(d_col_offset, col_offset, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
 
+    if((err = cudaMalloc((void **)&d_sub_lengths, sizeof(int) * num_objects)) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+    err = cudaMemcpy(d_sub_lengths, sub_lengths, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
+
+    if((err = cudaMalloc((void **)&d_sub_widths, sizeof(int) * num_objects)) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+    err = cudaMemcpy(d_sub_widths, sub_widths, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
+
+     if((err = cudaMalloc((void **)&d_sub_heights, sizeof(int) * num_objects)) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+    err = cudaMemcpy(d_sub_heights, sub_heights, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
+
+    if((err = cudaMalloc((void **)&d_obj_block_ends, sizeof(int) * num_objects)) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+   
     (*ds).d_frame = d_frame;
     (*ds).d_cx = d_cx;
     (*ds).d_cy = d_cy;
     (*ds).d_col_offset = d_col_offset;
     (*ds).d_row_offset = d_row_offset;
+    (*ds).d_sub_lengths = d_sub_lengths;
+    (*ds).d_sub_widths = d_sub_widths;
+    (*ds).d_sub_heights = d_sub_heights;
+    (*ds).d_obj_block_ends = d_obj_block_ends;
 }
 
 void freeDeviceStruct(d_struct * ds)
@@ -108,9 +169,13 @@ void freeDeviceStruct(d_struct * ds)
     cudaFree((*ds).d_cy);
     cudaFree((*ds).d_row_offset);
     cudaFree((*ds).d_col_offset);
+    cudaFree((*ds).d_sub_lengths);
+    cudaFree((*ds).d_sub_widths);
+    cudaFree((*ds).d_sub_heights);
+    cudaFree((*ds).d_obj_block_ends);
 }
 
-//For single object tracking
+//For single object tracking, but capable of toggle between tracking objects based on obj_id in main with its dimensions
 float launchTwoKernelReduction(int obj_id, int num_objects, d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int ** cx, int ** cy, bool shouldPrint)
 {
     float time = 0;
@@ -121,6 +186,11 @@ float launchTwoKernelReduction(int obj_id, int num_objects, d_struct ds, unsigne
     dim3 block(tile_width, 1, 1);
     dim3 grid(num_block, 1, 1);
     unsigned int dynamic_sharedMem_size = 3 * num_block * sizeof(float);
+
+
+    printf("num_block: %d\n", num_block);
+
+
 
     cudaError_t err; 
 
@@ -196,3 +266,160 @@ int gpuDistance(int x1, int y1, int x2, int y2)
     
     return (int) dist;
 }
+
+
+/******************************************** Multi-object tracking below ****************************************************/
+
+//Notes for the morning:
+//Draw out the mapping of it and trace through how it should look.
+//None of this is tested. You need to also add the appropriate arrays in main and call this function from main. That hasn't been done yet.
+//Also, I'd pass in the obj_converged array to the kernels, so that blocks not needed don't execute. (Down the road you can make that dynamic maybe...)
+
+
+float launchMultiObjectTwoKernelReduction(int num_objects, int * obj_block_ends, d_struct ds, unsigned char * frame, int frameLength, int frame_width, int * sub_widths, int * sub_heights,  int ** cx, int ** cy, bool shouldPrint, int * subFrameLengths)
+{
+	int obj_cur = 0;	
+	cudaError_t err; 
+    float time = 0;
+    int tile_width = 1024;
+    int num_block = 0; //total blocks required for all objects
+    cudaEvent_t launch_begin, launch_end;
+    cudaEventCreate(&launch_begin);
+    cudaEventCreate(&launch_end);
+    cudaEventRecord(launch_begin,0);
+
+
+
+   
+   
+    int prevX[num_objects];
+    int prevY[num_objects];
+    int * h_cx = (int *) malloc(sizeof(int) * num_objects);
+    int * h_cy = (int *) malloc(sizeof(int) * num_objects);
+    bool * obj_converged = (bool *) malloc(sizeof(bool) * num_objects);
+    int individualBlocks = 0;
+
+    for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+    {
+    	individualBlocks = ceil( (float) subFrameLengths[obj_cur] / (float) tile_width);
+		  num_block += individualBlocks;
+    	//printf("Obj %d: how many: %d block end: %d\n", obj_cur, individualBlocks, num_block);
+    	obj_block_ends[obj_cur] = num_block;
+    	h_cx[obj_cur] = (*cx)[obj_cur];
+    	h_cy[obj_cur] = (*cy)[obj_cur];
+    	prevX[obj_cur] = 0; 
+   		prevY[obj_cur] = 0;
+   		obj_converged[obj_cur] = false;
+    }
+
+    err = cudaMemcpy(ds.d_obj_block_ends, obj_block_ends, num_objects * sizeof(int), cudaMemcpyHostToDevice);
+
+    dim3 block(tile_width, 1, 1);
+    dim3 grid(num_block, 1, 1);
+
+    //Make d_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
+    float * d_out;
+    if((err = cudaMalloc((void **)&d_out, 3 * num_block * sizeof(float)))!= cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+
+    
+    err = cudaMemcpy(ds.d_frame, frame, frameLength * sizeof(unsigned char), cudaMemcpyHostToDevice);
+
+    
+  if(num_block <= tile_width)
+    {
+
+      while(  ! gpuMultiObjectConverged(num_objects, h_cx, h_cy, prevX, prevY, &obj_converged, shouldPrint))
+     {
+
+      	for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+      	{
+        	prevX[obj_cur] = h_cx[obj_cur];
+        	prevY[obj_cur] = h_cy[obj_cur];
+        }
+
+        gpuMultiObjectBlockReduce<<< grid, block >>>(ds.d_obj_block_ends, num_objects, ds.d_frame, d_out, ds.d_sub_lengths, num_block, frame_width, ds.d_sub_widths, ds.d_row_offset, ds.d_col_offset);
+        gpuMultiObjectFinalReduce<<< num_objects, num_block, num_block * 3 * sizeof(float) >>>(ds.d_obj_block_ends, num_objects, d_out, ds.d_cx, ds.d_cy, ds.d_row_offset, ds.d_col_offset, ds.d_sub_widths, ds.d_sub_heights, num_block);
+     
+        err =  cudaMemcpy(h_cx, ds.d_cx, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+        err =  cudaMemcpy(h_cy, ds.d_cy, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+   }
+    cudaDeviceSynchronize();
+    cudaEventRecord(launch_end,0);
+    cudaEventSynchronize(launch_end);
+    cudaEventElapsedTime(&time, launch_begin, launch_end);
+    
+    if(shouldPrint)
+    	 for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+          	printf("***** GPU FINISHED FRAME: Prev->(%d, %d) and New ->(%d, %d)\n", prevX[obj_cur], prevY[obj_cur], h_cx[obj_cur],  h_cy[obj_cur]);
+   
+  }
+  else
+    printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", num_block, tile_width);
+	
+	for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+	{
+    	(*cx)[obj_cur] = h_cx[obj_cur];
+    	(*cy)[obj_cur] = h_cy[obj_cur];
+  }
+    cudaFree(d_out);
+  //  free(h_out);
+    free(h_cx);
+    free(h_cy);
+    free(obj_converged);
+    if(shouldPrint)
+      printf("Finished GPU Frame\n");
+    return time;
+}
+
+bool gpuMultiObjectConverged(int num_objects, int * cx, int * cy, int * prevX, int * prevY, bool ** obj_converged, bool shouldPrint)
+{
+	int obj_cur;
+	int total = 0;
+	for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+	{
+		if(!(*obj_converged)[obj_cur]) //object has not converged yet
+		{
+ 			if(gpuDistance(prevX[obj_cur], prevY[obj_cur], cx[obj_cur], cy[obj_cur]) <= 1) //has converged
+ 			{
+ 				(*obj_converged)[obj_cur] = true; //set to converged
+ 				total ++;
+ 			}
+		}
+		else
+			total ++;
+		if(shouldPrint)
+			printf("PrevX vs NewX(%d, %d) and PrevY vs NewY(%d, %d)\n", prevX[obj_cur], cx[obj_cur], prevY[obj_cur], cy[obj_cur]);
+	}
+	if(total == num_objects) //All objects have finished converging
+		return true;
+	else
+		return false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

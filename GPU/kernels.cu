@@ -177,6 +177,401 @@ __global__ void gpuFinalReduce(int obj_id, float * g_odata, int * cx, int * cy, 
 }
 
 
+/************************************************************* MULTI-Object concurrent tracking kernels ***************************************************/
+
+__global__ void gpuMultiObjectBlockReduce(int * d_obj_block_ends, int num_objects, unsigned char *g_idata, float *g_odata, int * subframe_length, int num_block, int abs_width, int * sub_widths, int * row_offset, int * col_offset)
+{
+  unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
+
+  //*********************************************************************************/
+  __shared__ float shared_M00[1024];
+  __shared__ float shared_M1x[1024];
+  __shared__ float shared_M1y[1024];
+  __shared__ int shared_hist_offset[1];
+  __shared__ int shared_obj_id[1];
+
+ // __shared__ int shared_block_start[1];
+  // each thread loads one element from global to shared mem
+  unsigned int tid = threadIdx.x;
+  unsigned int sub_col = 0;
+  unsigned int sub_row = 0;
+  unsigned int absolute_index = 0;
+
+  if(tid == 0)
+  {
+    shared_obj_id[0] = gpuCalcObjID(d_obj_block_ends, num_objects);
+    shared_hist_offset[0] =  shared_obj_id[0] * HIST_BUCKETS;
+        
+  }
+  __syncthreads();
+
+
+    if(shared_obj_id[0] != 0 )
+    {
+        int empty_threads = d_obj_block_ends[ shared_obj_id[0] - 1] * 1024;
+
+       /* if(tid == 0)
+        {
+          printf("Blocks before us: %d and so empty threads: %d\n",d_obj_block_ends[ shared_obj_id[0] - 1], empty_threads);
+        }*/
+        i -= empty_threads;
+    }
+
+
+
+
+    if(i < subframe_length[shared_obj_id[0]]) 
+    {
+        sub_col = i % sub_widths[shared_obj_id[0]];
+        sub_row = i / sub_widths[shared_obj_id[0]];
+
+        absolute_index = (row_offset[ shared_obj_id[0] ] * abs_width) + col_offset[ shared_obj_id[0] ] + sub_col + (abs_width * sub_row);
+        
+        shared_M00[tid] = const_histogram[ (g_idata[absolute_index] / 3) + shared_hist_offset[0]];
+        shared_M1x[tid] = ((float)(sub_col + col_offset[shared_obj_id[0]])) * shared_M00[tid];
+        shared_M1y[tid] = ((float)(sub_row + row_offset[shared_obj_id[0]])) * shared_M00[tid];
+    }
+    else 
+    {
+      //if(shared_obj_id[0] == 1)
+        //  printf("For Block %d, obj id: %d, block end: %d, hist offset: %d, *****subLength: %d < i == %d ******,  sub_width: %d, row_offset: %d, col_offset: %d\n", 
+           // blockIdx.x, shared_obj_id[0], d_obj_block_ends[shared_obj_id[0]], shared_hist_offset[0], subframe_length[0] + subframe_length[1], i, sub_widths[shared_obj_id[0]], row_offset[shared_obj_id[0]], col_offset[shared_obj_id[0]]);
+
+        shared_M00[tid] = 0;
+        shared_M1x[tid] = 0;
+        shared_M1y[tid] = 0;
+    }
+
+
+    __syncthreads();
+
+    for (unsigned int s = blockDim.x / 2; s > 32; s >>= 1) 
+    { 
+      if (tid < s)
+      {
+        shared_M00[tid] += shared_M00[tid + s]; 
+        shared_M1x[tid] += shared_M1x[tid + s]; 
+        shared_M1y[tid] += shared_M1y[tid + s]; 
+      }
+      __syncthreads(); 
+    }
+
+    if(tid < 32){
+       warpReduce(shared_M00, shared_M1x, shared_M1y, tid);
+    }
+     __syncthreads();
+    // write result for this block to global mem
+    if (tid == 0) {
+      g_odata[blockIdx.x] = shared_M00[0]; 
+      g_odata[blockIdx.x + num_block] = shared_M1x[0]; 
+      g_odata[blockIdx.x + (2 * num_block)] = shared_M1y[0]; 
+    }
+}
+
+
+__device__ int gpuBlockStart(int * d_obj_block_ends, int num_objects)
+{
+  int block = blockIdx.x;
+  int prevBlockEnd = 0;
+  int i = 0;
+  for(i = 0; i < num_objects; i ++)
+  {
+    if(block >= prevBlockEnd && block < d_obj_block_ends[i])
+      return prevBlockEnd;
+    prevBlockEnd = d_obj_block_ends[i];
+  }
+  return prevBlockEnd;
+}
+
+
+
+
+
+
+__global__ void gpuMultiObjectFinalReduce(int * d_obj_block_ends, int num_objects, float *g_odata, int * cx, int * cy, int * row_offset, int * col_offset, int * sub_widths, int * sub_heights, int num_block)
+{
+    extern __shared__ float shared_sum[];
+    unsigned int i = blockIdx.x*blockDim.x + threadIdx.x; 
+ 
+   __shared__ int shared_block_start[1];
+
+    unsigned int tid = threadIdx.x; 
+    
+     if(tid == 0){ //Calculate the starting block 
+       shared_block_start[0] = (blockIdx.x > 0) ? d_obj_block_ends[blockIdx.x - 1]: 0;
+
+       // printf("*****Final reduce: Block %d, the shared obj id: %d, the shared block start: %d\n", blockIdx.x, blockIdx.x, shared_block_start[0]);
+     }
+     __syncthreads();
+    
+    if(tid >= shared_block_start[0] && tid < d_obj_block_ends[blockIdx.x])
+    {
+      shared_sum[tid] = g_odata[tid]; //M00
+      shared_sum[tid + num_block] = g_odata[tid + num_block]; //M1x
+      shared_sum[tid + num_block + num_block] = g_odata[tid + num_block + num_block];//M1y
+    }
+    else
+   {
+     shared_sum[tid] = 0.0; //M00
+     shared_sum[tid + num_block] = 0.0; //M1x
+     shared_sum[tid + num_block + num_block] = 0.0;//M1y
+   }
+    __syncthreads();
+
+    if(tid == 0)
+    {
+      int ind = 0;
+      double M00 = 0.0;
+      double M1x = 0.0;
+      double M1y = 0.0;
+      int newX = 0;
+      int newY = 0;
+
+
+    //  printf("Block: %d --> %d to %d\n", blockIdx.x, shared_block_start[0], d_obj_block_ends[blockIdx.x]);
+
+
+
+      for(ind = 0; ind < num_block; ind ++)
+      {
+          M00 += shared_sum[ind];
+          M1x += shared_sum[ind + num_block];
+          M1y += shared_sum[ind + num_block + num_block];
+      }
+      newX = (int) ((int)M1x / (int)M00);
+      newY = (int) ((int)M1y / (int)M00);
+
+      col_offset[blockIdx.x] = newX - (sub_widths[blockIdx.x] / 2);
+      row_offset[blockIdx.x] = newY - (sub_heights[blockIdx.x] / 2);
+
+      if(col_offset[blockIdx.x] < 0) col_offset[blockIdx.x] = 0;
+      if(row_offset[blockIdx.x] < 0) row_offset[blockIdx.x] = 0;
+
+      cx[blockIdx.x] = newX;
+      cy[blockIdx.x] = newY;
+  //  printf("\nIn gpuFinalReduce Block %d: M00:%lf M1x:%lf M1y: %lf, NewX: %d NewY: %d \n", blockIdx.x, M00, M1x, M1y, newX, newY);
+  }
+}
+
+
+
+
+
+
+
+//Based on block id, determine if entire block of threads belong to calculation for a given object
+//Threads in the block don't need to be aware of the block boundaries specifically
+__device__ int gpuCalcObjID(int * d_obj_block_ends, int num_objects)
+{
+  int block = blockIdx.x;
+  int prevBlockEnd = 0;
+  int i = 0;
+  for(i = 0; i < num_objects; i ++)
+  {
+    if(block >= prevBlockEnd && block < d_obj_block_ends[i])
+      return i;
+    prevBlockEnd = d_obj_block_ends[i];
+  }
+  return num_objects -1;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

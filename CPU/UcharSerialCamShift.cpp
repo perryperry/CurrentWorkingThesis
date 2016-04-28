@@ -129,7 +129,7 @@ float SerialCamShift::cpu_entireFrameMeanShift(unsigned char * hueArray, int ste
             return 1000000.0;//return an unrealistically large number to show something went wrong
         }
         
-        if(shouldPrint){
+      if(shouldPrint){
             printf("Inside CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
             printf("Inside CPU MeanShift ---> centroid:(%d, %d), topX:%d, topY:%d\n",  cpu_cx[0],  cpu_cy[0], roi.getTopLeftX(), roi.getTopLeftY());
         }

@@ -29,6 +29,7 @@ public:
     int _height;
     RegionOfInterest();
     void init(Point topR, Point botL, int fWidth, int fHeight);
+    void setWidthHeight(int width, int height);
     void drawCPU_ROI(Mat * frame);
     void drawGPU_ROI(Mat * frame);
     void setCentroid(Point centroid);

@@ -16,6 +16,8 @@
 #include <ctime>
 #include <ratio>
 #include <chrono>
+#include <math.h>
+
 using namespace std::chrono;
 #define BUCKET_WIDTH 3
 #define BUCKETS 60
@@ -31,6 +33,8 @@ public:
     void backProjectHistogram(unsigned char * hsv, int step, Mat * frame, RegionOfInterest roi, float * histogram);
     
     float cpu_entireFrameMeanShift(unsigned char * hueArray, int step, RegionOfInterest cpu_objects, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy);
+    
+    float cpuCamShift(unsigned char * hueArray, int step, RegionOfInterest cpu_objects, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy, int * width, int * height);
 };
 
 int distance(int x1, int y1, int x2, int y2);

@@ -8,6 +8,7 @@
 #include <math.h>
 
 struct device_struct {
+    float * d_out;
     int * d_cx;
     int * d_cy;
     int * d_col_offset;
@@ -21,7 +22,7 @@ struct device_struct {
 
 void timeMemoryTransfer();
 
-void initDeviceStruct(int num_objects, d_struct * ds, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset, int * subFrameLengths, int * sub_widths, int * sub_heights);
+int initDeviceStruct(int num_objects, d_struct * ds, int * obj_block_ends, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset, int * subFrameLengths, int * sub_widths, int * sub_heights);
 
 void freeDeviceStruct(d_struct * ds);
 
@@ -41,16 +42,9 @@ int gpuDistance(int x1, int y1, int x2, int y2);
 
 /******************************************** Multi-object tracking below ****************************************************/
 
-float launchMultiObjectTwoKernelReduction(int num_objects, int * obj_block_ends, d_struct ds, unsigned char * frame, int frameLength, int frame_width, int * sub_widths, int * sub_heights,  int ** cx, int ** cy, bool shouldPrint, int * subFrameLengths);
+float launchMultiObjectTwoKernelReduction(int num_objects, int num_block, d_struct ds, unsigned char * frame, int frameLength, int frame_width, int ** cx, int ** cy, bool shouldPrint);
 
 bool gpuMultiObjectConverged(int num_objects, int * cx, int * cy, int * prevX, int * prevY, bool ** obj_converged, bool shouldPrint);
-
-
-
-
-
-
-
 
 #endif
 

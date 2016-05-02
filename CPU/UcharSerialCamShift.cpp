@@ -70,15 +70,15 @@ void SerialCamShift::printHistogram(float * histogram, int length)
 
 int distance(int x1, int y1, int x2, int y2)
 {
-    int distx = (x2 - x1) * (x2 - x1);
-    int disty = (y2 - y1) * (y2 - y1);
+    unsigned int distx = (x2 - x1) * (x2 - x1);
+    unsigned int disty = (y2 - y1) * (y2 - y1);
     
     double dist = sqrt(distx + disty);
-    
+   
     return (int) dist;
 }
 
-float SerialCamShift::cpu_entireFrameMeanShift(unsigned char * hueArray, int step, RegionOfInterest roi, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy)
+float SerialCamShift::cpuMeanShift(unsigned char * hueArray, int step, RegionOfInterest roi, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy)
 {
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
@@ -142,20 +142,20 @@ float SerialCamShift::cpu_entireFrameMeanShift(unsigned char * hueArray, int ste
 
 
 
-float SerialCamShift::cpuCamShift(unsigned char * hueArray, int step, RegionOfInterest roi, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy, int * width, int * height)
+float SerialCamShift::cpuCamShift(unsigned char * hueArray, int step, RegionOfInterest roi, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy, int * width, int * height, int hueLength)
 {
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
-    float M00 = 0.0, M1x = 0.0, M1y = 0.0, M2x = 0.0, M2y = 0.0, ratio = 0.0, probability = 0.0;
-    int hue = 0, prevX = 0, prevY = 0, cx = 0, cy = 0;
+    float M00 = 0.0, M1x = 0.0, M1y = 0.0, M2x = 0.0, M2y = 0.0, probability = 0.0, ratio = 0.0;
+    unsigned int hue = 0, prevX = 0, prevY = 0, cx = 0, cy = 0, maxHue = 0;
   
     time1 = high_resolution_clock::now();
     
     Point topLeft = roi.getTopLeft();
     Point bottomRight = roi.getBottomRight();
     
-    int obj_offset = obj_index * BUCKETS; //offset to the next object's segment of the histogram
-    
+    unsigned int obj_offset = obj_index * BUCKETS; //offset to the next object's segment of the histogram
+    unsigned int window_expansion = 5;
     while(distance(prevX, prevY, cpu_cx[0], cpu_cy[0]) > 1)
     {
         M00 = 0.0;
@@ -165,52 +165,75 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, int step, RegionOfIn
         M2y = 0.0;
         prevX = cpu_cx[0];
         prevY = cpu_cy[0];
-        
-        for(int col = roi.getTopLeftX(); col < roi.getBottomRightX();col++)
+     
+        for(int col = roi.getTopLeftX() - window_expansion; col < roi.getBottomRightX() +  window_expansion;col++)
         {
-            for(int row = roi.getTopLeftY(); row < roi.getBottomRightY();row++)
+            for(int row = roi.getTopLeftY() -  window_expansion; row < roi.getBottomRightY() + window_expansion;row++)
             {
-                hue = hueArray[step * row + col];
-                probability = histogram[(hue / BUCKET_WIDTH) + obj_offset];
                 
-                M00 += probability;
-                M1x += ((float)col) * probability;
-                M1y += ((float)row) * probability;
-                M2x += (col * col * probability);
-                M2y += (row * row * probability);
+                if(step * row + col < hueLength)
+                {
+                    hue = hueArray[step * row + col];
+                    
+                    
+                    if(hue > maxHue)
+                        maxHue = hue;
+                    
+                    
+                    probability = histogram[(hue / BUCKET_WIDTH) + obj_offset];
+                    
+                    M00 += probability;
+                    M1x += ((float)col) * probability;
+                    M1y += ((float)row) * probability;
+                    M2x += (col * col * probability);
+                    M2y += (row * row * probability);
+                }
+                else{
+                    printf("Problem: %d %d\n", roi.getBottomRightX(), roi.getBottomRightY());
+                }
+                
             }
         }
-        
         if(M00 > 0){//Can't divide by zero...
             
-            cx = (int)((int)M1x / (int)M00);
-            cy = (int)((int)M1y / (int)M00);
-            
-            
-            if(M2y / ((float) (cy * cy)) > 1){
-            
-            
-                ratio = (M2x / ((cx * cx))) / (M2y / ((cy * cy)));
-            
-            
-            
-            
-                *width = (int)(sqrt(2 * M00) * ratio);
-                *height = (int)(sqrt(2 * M00) / ratio);
-            
-                printf("Ratio: %f Width: %d Height: %d\n", ratio, *width, *height);
-                roi.setWidthHeight(*width, *height);
-                roi.printROI();
-            }
-            else
-               printf("Height would be too small");
-            
-            
+            cx = (int)(M1x / M00);
+            cy = (int)(M1y / M00);
             cpu_cx[0] = cx;
             cpu_cy[0] = cy;
             roi.setCentroid(Point( cpu_cx[0], cpu_cy[0] ));
-
            
+    
+            
+           /* ratio = (M2x / ((cx * cx))) / (M2y / ((cy * cy)));
+       
+            *width = ceil(sqrt(2 * M00) * ratio);
+            *height = ceil(sqrt(2 * M00) / ratio);
+        
+            printf("***********Ratio: %f Width: %d Height: %d************\n", ratio, *width, *height);
+            roi.setWidthHeight(*width, *height);
+            roi.printROI();*/
+         
+            
+           
+            
+     //   printf("Original Width: %d Height: %d  M00: %f \n", roi._width, roi._height,M00);
+          
+            
+            *width = ceil(2 * sqrt(M00));
+            
+            if(*width < 5)
+                *width = 5;
+            
+           *height = ceil(*width * 1.1);
+            
+            if(*height < 5)
+                *height = 5;
+       
+          // printf("***New Width: %d Height: %d, ratio: %f\n", *width, *height, ratio);
+            
+         roi.setWidthHeight(*width, *height);
+
+          
             
         }
         else

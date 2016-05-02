@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #define SHARED_SIZE_LIMIT 1024
 #define HIST_BUCKETS 60
@@ -35,5 +36,6 @@ __global__ void gpuMultiObjectFinalReduce(int * d_obj_block_ends, int num_object
 
 __device__ int gpuCalcObjID(int * d_obj_block_ends, int num_objects);
 
+__global__ void gpuCamShiftMultiObjectFinalReduce(int * d_obj_block_ends, int num_objects, float *g_odata, int * cx, int * cy, int * subframe_length, int * row_offset, int * col_offset, int * sub_widths, int * sub_heights, int num_block);
 
 #endif

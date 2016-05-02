@@ -33,7 +33,7 @@ void parameterCheck(int argCount)
     }
 }
 
-int calculateHueArrayLength(Mat frame, int * step)
+int calculateHueArrayLength(Mat frame, int * step, int * mat_rows, int * mat_cols)
 {
     Mat hsvMat;
     cvtColor(frame, hsvMat, CV_RGB2HSV);
@@ -42,6 +42,8 @@ int calculateHueArrayLength(Mat frame, int * step)
     Mat hueMatrix = hsv_channels[0];
     int total = hueMatrix.total();
     *step = hueMatrix.step;
+    *mat_rows = hueMatrix.rows;
+    *mat_cols = hueMatrix.cols;
     return total;
 }
 
@@ -156,9 +158,6 @@ int main(int argc, const char * argv[])
     int * gpu_cx = (int *) malloc(sizeof(int) * num_objects); //centroid x for gpu
     int * gpu_cy = (int *) malloc(sizeof(int) * num_objects); //centroid y for gpu
     
-    
-    
-    
     //For multi-object test
     int * obj_block_ends = (int *) malloc(sizeof(int) * num_objects); //ending block of each object in kernel
     int * subFrameLengths = (int *) malloc(sizeof(int) * num_objects);;
@@ -176,6 +175,7 @@ int main(int argc, const char * argv[])
     int cpu_cx = 0; //centroid x for cpu
     int cpu_cy = 0; //centroid x for cpu
     int step = 0; //The width of the entire frame
+    int mat_rows = 0, mat_cols = 0;
     int * gpu_row_offset = (int *) malloc(sizeof(int) * num_objects); //for gpu
     int * gpu_col_offset = (int *) malloc(sizeof(int) * num_objects); //for gpu
     SerialCamShift camShift;
@@ -211,7 +211,9 @@ int main(int argc, const char * argv[])
     /************************************* First Frame initialize and process ****************************************/
     cap.read(frame);
     float * histogram = (float *) calloc(sizeof(float), BUCKETS * num_objects);
-    int hueLength = calculateHueArrayLength(frame, &step);
+    int hueLength = calculateHueArrayLength(frame, &step, &mat_rows, &mat_cols);
+    
+    printf("Mat: rows: %d cols: %d\n", mat_rows, mat_cols);
     unsigned char * entireHueArray = (unsigned char *) malloc(sizeof(unsigned char) * hueLength);
     convertToHueArray(frame, &entireHueArray);
 
@@ -231,6 +233,9 @@ int main(int argc, const char * argv[])
     }
     outputVideo.write(frame);
     
+    
+    float ratio = (float) cpu_objects[0]._height / (float) cpu_objects[0]._width;
+    
   if( shouldProcessVideo )
   {
      int num_block = initDeviceStruct(num_objects, ds, obj_block_ends, entireHueArray, hueLength, gpu_cx , gpu_cy, gpu_col_offset, gpu_row_offset, subFrameLengths, sub_widths, sub_heights); //gpu device struct for kernel memory re-use
@@ -246,16 +251,16 @@ int main(int argc, const char * argv[])
                {
                     cpu_cx = cpu_objects[obj_cur].getCenterX();
                     cpu_cy = cpu_objects[obj_cur].getCenterY();
-                    cpu_time_cost += camShift.cpu_entireFrameMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
+                   // cpu_time_cost += camShift.cpuMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
                    
-                  // int width = 0, height = 0;
+                  int width = 0, height = 0;
                    
                    //Cam Shift test
                    
-               //    cpu_time_cost += camShift.cpuCamShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy, &width, &height);
+                 cpu_time_cost += camShift.cpuCamShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy, &width, &height, hueLength);
                    
                     cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
-                //   cpu_objects[obj_cur].setWidthHeight(width, height);
+                   cpu_objects[obj_cur].setWidthHeight(width, height);
                     cpu_objects[obj_cur].drawCPU_ROI(&frame);
               }
             }
@@ -268,7 +273,7 @@ int main(int argc, const char * argv[])
                 gpu_objects[obj_cur].drawGPU_ROI(&frame);*/
                 
                 
-              gpu_time_cost += launchMultiObjectTwoKernelReduction(num_objects, num_block, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, shouldPrint);
+              gpu_time_cost += launchMultiObjectTwoKernelCamShift(num_objects, num_block, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, &sub_widths, &sub_heights, shouldPrint);
                 
                 for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
                 {

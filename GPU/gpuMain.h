@@ -46,5 +46,8 @@ float launchMultiObjectTwoKernelReduction(int num_objects, int num_block, d_stru
 
 bool gpuMultiObjectConverged(int num_objects, int * cx, int * cy, int * prevX, int * prevY, bool ** obj_converged, bool shouldPrint);
 
+
+float launchMultiObjectTwoKernelCamShift(int num_objects, int num_block, d_struct ds, unsigned char * frame, int frameLength, int frame_width, int ** cx, int ** cy, int ** sub_widths, int ** sub_heights, bool shouldPrint);
+
 #endif
 

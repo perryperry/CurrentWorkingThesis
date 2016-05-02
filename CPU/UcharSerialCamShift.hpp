@@ -32,9 +32,9 @@ public:
     
     void backProjectHistogram(unsigned char * hsv, int step, Mat * frame, RegionOfInterest roi, float * histogram);
     
-    float cpu_entireFrameMeanShift(unsigned char * hueArray, int step, RegionOfInterest cpu_objects, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy);
+    float cpuMeanShift(unsigned char * hueArray, int step, RegionOfInterest cpu_objects, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy);
     
-    float cpuCamShift(unsigned char * hueArray, int step, RegionOfInterest cpu_objects, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy, int * width, int * height);
+    float cpuCamShift(unsigned char * hueArray, int step, RegionOfInterest cpu_objects, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy, int * width, int * height, int hueLength);
 };
 
 int distance(int x1, int y1, int x2, int y2);

@@ -79,8 +79,8 @@ Point RegionOfInterest::calcBottomRight(Point topLeft, int ww, int wh)
 {
     int bottomRight_x = topLeft.x + ww;
     int bottomRight_y = topLeft.y + wh;
-    if(bottomRight_x > _frameWidth - 1) bottomRight_x = _frameWidth- 1;
-    if(bottomRight_y > _frameHeight - 1) bottomRight_y = _frameHeight -1;
+    if(bottomRight_x > _frameWidth - 1) bottomRight_x = _frameWidth - 1;
+    if(bottomRight_y > _frameHeight - 1) bottomRight_y = _frameHeight - 1;
     return Point(bottomRight_x, bottomRight_y);
 }
 

@@ -54,7 +54,7 @@ __device__ void warpReduce(volatile float* shared_M00, volatile float* shared_M1
 
 void setConstantMemoryHistogram(float * histogram, int num_objects)
 {
-    cudaMemcpyToSymbol(const_histogram, histogram, sizeof(float) * 60 * num_objects);
+    cudaMemcpyToSymbol(const_histogram, histogram, sizeof(float) * HIST_BUCKETS * num_objects);
 }
 
 //************** WORKING KERNELS ********************//
@@ -350,7 +350,71 @@ __device__ int gpuCalcObjID(int * d_obj_block_ends, int num_objects)
 
 
 
+__global__ void gpuCamShiftMultiObjectFinalReduce(int * d_obj_block_ends, int num_objects, float *g_odata, int * cx, int * cy, int * subframe_length, int * row_offset, int * col_offset, int * sub_widths, int * sub_heights, int num_block)
+{
+    extern __shared__ float shared_sum[];
+   __shared__ int shared_block_dim[2]; //0 index == starting block, 1 index == end block
+    unsigned int tid = threadIdx.x; 
+    
+     if(tid == 0){ //Calculate the starting block 
+       shared_block_dim[0] = (blockIdx.x > 0) ? d_obj_block_ends[blockIdx.x - 1]: 0;
+       shared_block_dim[1] = d_obj_block_ends[blockIdx.x];
+       // printf("*****Final reduce: Block %d, the shared obj id: %d, the shared block start: %d\n", blockIdx.x, blockIdx.x, shared_block_start[0]);
+     }
+     __syncthreads();
+    
+    if(tid >= shared_block_dim[0] && tid < shared_block_dim[1])
+    {
+      shared_sum[tid] = g_odata[tid]; //M00
+      shared_sum[tid + num_block] = g_odata[tid + num_block]; //M1x
+      shared_sum[tid + num_block + num_block] = g_odata[tid + num_block + num_block];//M1y
+    }
+    else
+   {
+     shared_sum[tid] = 0.0; //M00
+     shared_sum[tid + num_block] = 0.0; //M1x
+     shared_sum[tid + num_block + num_block] = 0.0;//M1y
+   }
+    __syncthreads();
 
+    if(tid == 0)
+    {
+      int ind = 0;
+      double M00 = 0.0;
+      double M1x = 0.0;
+      double M1y = 0.0;
+      int newX = 0;
+      int newY = 0;
+      int newColOffset = 0;
+      int newRowOffset = 0;
+      int width = 0;
+      int height = 0;
+      for(ind = 0; ind < num_block; ind ++)
+      {
+          M00 += shared_sum[ind];
+          M1x += shared_sum[ind + num_block];
+          M1y += shared_sum[ind + num_block + num_block];
+      }
+      newX = (int) ((int)M1x / (int)M00);
+      newY = (int) ((int)M1y / (int)M00);
+
+      newColOffset =  newX - (sub_widths[blockIdx.x] / 2);
+      newRowOffset = newY - (sub_heights[blockIdx.x] / 2);
+
+      col_offset[blockIdx.x] = (newColOffset > 0) ? newColOffset : 0;
+      row_offset[blockIdx.x] = (newRowOffset > 0) ? newRowOffset : 0;
+
+      cx[blockIdx.x] = newX;
+      cy[blockIdx.x] = newY;
+
+       width = ceil(2 * sqrt(M00));
+       sub_widths[blockIdx.x] = width;
+      height = ceil(width * 1.1);
+      sub_heights[blockIdx.x] = height;
+       subframe_length[blockIdx.x] =  width * height;
+  //  printf("\nIn gpuFinalReduce Block %d: M00:%lf M1x:%lf M1y: %lf, NewX: %d NewY: %d \n", blockIdx.x, M00, M1x, M1y, newX, newY);
+  }
+}
 
 
 
@@ -568,7 +632,7 @@ __global__ void gpuSingleKernelMeanShift(unsigned char *g_idata, float *g_odata,
 
       absolute_index = (row_offset[0] * abs_width) + col_offset[0] + sub_col + (abs_width * sub_row);
       
-      shared_M00[tid] = const_histogram[ g_idata[absolute_index] / 3 ];
+      shared_M00[tid] = const_histogram[ g_idata[absolute_index] / 3];
       shared_M1x[tid] = ((float)(sub_col + col_offset[0])) * shared_M00[tid];
       shared_M1y[tid] = ((float)(sub_row + row_offset[0])) * shared_M00[tid];
   }

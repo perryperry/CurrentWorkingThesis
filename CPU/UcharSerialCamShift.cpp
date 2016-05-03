@@ -155,7 +155,7 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, int step, RegionOfIn
     Point bottomRight = roi.getBottomRight();
     
     unsigned int obj_offset = obj_index * BUCKETS; //offset to the next object's segment of the histogram
-    unsigned int window_expansion = 5;
+    unsigned int window_expansion = 0;
     while(distance(prevX, prevY, cpu_cx[0], cpu_cy[0]) > 1)
     {
         M00 = 0.0;
@@ -221,13 +221,13 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, int step, RegionOfIn
             
             *width = ceil(2 * sqrt(M00));
             
-            if(*width < 5)
-                *width = 5;
+            if(*width < 10)
+                *width = 10;
             
            *height = ceil(*width * 1.1);
             
-            if(*height < 5)
-                *height = 5;
+            if(*height < 10)
+                *height = 10;
        
           // printf("***New Width: %d Height: %d, ratio: %f\n", *width, *height, ratio);
             

@@ -202,6 +202,7 @@ __global__ void gpuMultiObjectBlockReduce(int * d_obj_block_ends, int num_object
   {
     shared_obj_id[0] = gpuCalcObjID(d_obj_block_ends, num_objects);
     shared_hist_offset[0] =  shared_obj_id[0] * HIST_BUCKETS;
+
     if(shared_obj_id[0] != 0 )
       shared_thread_offset[0] = d_obj_block_ends[shared_obj_id[0] - 1] * 1024;
     else
@@ -211,6 +212,10 @@ __global__ void gpuMultiObjectBlockReduce(int * d_obj_block_ends, int num_object
 
     i -= shared_thread_offset[0];
   
+
+  if(i < 777600)
+  {
+
     if(i < subframe_length[shared_obj_id[0]]) 
     {
         sub_col = i % sub_widths[shared_obj_id[0]];
@@ -253,6 +258,8 @@ __global__ void gpuMultiObjectBlockReduce(int * d_obj_block_ends, int num_object
       g_odata[blockIdx.x + num_block] = shared_M1x[0]; 
       g_odata[blockIdx.x + (2 * num_block)] = shared_M1y[0]; 
     }
+
+  } //end limit check
 }
 
 
@@ -400,7 +407,9 @@ __global__ void gpuCamShiftMultiObjectFinalReduce(int * d_obj_block_ends, int nu
       newY = (int) (M1y / M00);
 
 
-      width = ceil(2 * sqrt(M00));
+      width = ceil(2.0 * sqrt(M00));
+
+     // printf("Width: %d\n", width);
       if(width < 10)
         width = 10;
 

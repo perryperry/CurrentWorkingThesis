@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
+#include <math_functions.h>
 
 #define SHARED_SIZE_LIMIT 1024
 #define HIST_BUCKETS 60

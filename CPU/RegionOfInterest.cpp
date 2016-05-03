@@ -79,8 +79,19 @@ Point RegionOfInterest::calcBottomRight(Point topLeft, int ww, int wh)
 {
     int bottomRight_x = topLeft.x + ww;
     int bottomRight_y = topLeft.y + wh;
-    if(bottomRight_x > _frameWidth - 1) bottomRight_x = _frameWidth - 1;
-    if(bottomRight_y > _frameHeight - 1) bottomRight_y = _frameHeight - 1;
+    if(bottomRight_x > _frameWidth - 1)
+    {
+        bottomRight_x = _frameWidth - 1;
+        _width = _frameWidth - topLeft.x - 1;
+        
+        printf("ROI: had to adjust _width: %d, because topLeft.x: %d\n",_width, topLeft.x);
+    }
+    if(bottomRight_y > _frameHeight - 1)
+    {
+        bottomRight_y = _frameHeight - 1;
+       _height = _frameHeight - topLeft.y - 1;
+       printf("ROI: had to adjust _height: %d, because topLeft.y: %d\n", _height, topLeft.y);
+    }
     return Point(bottomRight_x, bottomRight_y);
 }
 

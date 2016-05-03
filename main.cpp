@@ -223,8 +223,8 @@ int main(int argc, const char * argv[])
 
     //For the initial frame, just render the initial search windows' positions
     for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
-        cpu_objects[obj_cur].drawCPU_ROI(&frame);
-        gpu_objects[obj_cur].drawGPU_ROI(&frame);
+      //  cpu_objects[obj_cur].drawCPU_ROI(&frame);
+       // gpu_objects[obj_cur].drawGPU_ROI(&frame);
         //load gpu starting values as well
         gpu_row_offset[obj_cur] = gpu_objects[obj_cur].getTopLeftY();
         gpu_col_offset[obj_cur] = gpu_objects[obj_cur].getTopLeftX();
@@ -236,9 +236,77 @@ int main(int argc, const char * argv[])
     
     float ratio = (float) cpu_objects[0]._height / (float) cpu_objects[0]._width;
     
+    
+   
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+   /*  if( ! shouldProcessVideo )// testing
+     {
+         for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+         {
+             cpu_cx = cpu_objects[obj_cur].getCenterX();
+             cpu_cy = cpu_objects[obj_cur].getCenterY();
+             // cpu_time_cost += camShift.cpuMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
+             
+             int width = 0, height = 0;
+             
+             //Cam Shift test
+             
+             cpu_time_cost += camShift.cpuCamShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy, &width, &height, hueLength);
+             
+             cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
+             cpu_objects[obj_cur].setWidthHeight(width, height);
+             cpu_objects[obj_cur].drawCPU_ROI(&frame);
+         }
+         
+         
+         
+         gpu_time_cost += launchMultiObjectTwoKernelCamShift(num_objects, num_block, obj_block_ends, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, &sub_widths, &sub_heights, subFrameLengths, shouldPrint);
+         
+         for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+         {
+             gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
+             gpu_objects[obj_cur].setWidthHeight(sub_widths[obj_cur], sub_heights[obj_cur]);
+             gpu_objects[obj_cur].drawGPU_ROI(&frame);
+         }
+    
+     }*/
+    
+    
+  //   outputVideo.write(frame);
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
   if( shouldProcessVideo )
   {
-     int num_block = initDeviceStruct(num_objects, ds, obj_block_ends, entireHueArray, hueLength, gpu_cx , gpu_cy, gpu_col_offset, gpu_row_offset, subFrameLengths, sub_widths, sub_heights); //gpu device struct for kernel memory re-use
+      int num_block = initDeviceStruct(num_objects, ds, obj_block_ends, entireHueArray, hueLength, gpu_cx , gpu_cy, gpu_col_offset, gpu_row_offset, subFrameLengths, sub_widths, sub_heights); //gpu device struct for kernel memory re-use
 
    while(cap.read(frame))
      {
@@ -273,11 +341,12 @@ int main(int argc, const char * argv[])
                 gpu_objects[obj_cur].drawGPU_ROI(&frame);*/
                 
                 
-              gpu_time_cost += launchMultiObjectTwoKernelCamShift(num_objects, num_block, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, &sub_widths, &sub_heights, shouldPrint);
+                gpu_time_cost += launchMultiObjectTwoKernelCamShift(num_objects, num_block, obj_block_ends, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, &sub_widths, &sub_heights, subFrameLengths, shouldPrint);
                 
                 for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
                 {
                     gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
+                    gpu_objects[obj_cur].setWidthHeight(sub_widths[obj_cur], sub_heights[obj_cur]);
                     gpu_objects[obj_cur].drawGPU_ROI(&frame);
                 }
                 

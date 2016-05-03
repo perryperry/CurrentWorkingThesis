@@ -155,7 +155,7 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, int step, RegionOfIn
     Point bottomRight = roi.getBottomRight();
     
     unsigned int obj_offset = obj_index * BUCKETS; //offset to the next object's segment of the histogram
-    unsigned int window_expansion = 0;
+
     while(distance(prevX, prevY, cpu_cx[0], cpu_cy[0]) > 1)
     {
         M00 = 0.0;
@@ -166,32 +166,23 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, int step, RegionOfIn
         prevX = cpu_cx[0];
         prevY = cpu_cy[0];
      
-        for(int col = roi.getTopLeftX() - window_expansion; col < roi.getBottomRightX() +  window_expansion;col++)
+        for(int col = roi.getTopLeftX(); col < roi.getBottomRightX();col++)
         {
-            for(int row = roi.getTopLeftY() -  window_expansion; row < roi.getBottomRightY() + window_expansion;row++)
+            for(int row = roi.getTopLeftY(); row < roi.getBottomRightY();row++)
             {
-                
                 if(step * row + col < hueLength)
                 {
                     hue = hueArray[step * row + col];
-                    
-                    
-                    if(hue > maxHue)
-                        maxHue = hue;
-                    
-                    
                     probability = histogram[(hue / BUCKET_WIDTH) + obj_offset];
-                    
                     M00 += probability;
                     M1x += ((float)col) * probability;
                     M1y += ((float)row) * probability;
-                    M2x += (col * col * probability);
-                    M2y += (row * row * probability);
+                   //M2x += (col * col * probability);
+                    //M2y += (row * row * probability);
                 }
                 else{
                     printf("Problem: %d %d\n", roi.getBottomRightX(), roi.getBottomRightY());
                 }
-                
             }
         }
         if(M00 > 0){//Can't divide by zero...
@@ -212,34 +203,25 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, int step, RegionOfIn
             printf("***********Ratio: %f Width: %d Height: %d************\n", ratio, *width, *height);
             roi.setWidthHeight(*width, *height);
             roi.printROI();*/
-         
-            
-           
-            
-     //   printf("Original Width: %d Height: %d  M00: %f \n", roi._width, roi._height,M00);
-          
-            
+
             *width = ceil(2 * sqrt(M00));
             
             if(*width < 10)
                 *width = 10;
             
            *height = ceil(*width * 1.1);
-            
-            if(*height < 10)
-                *height = 10;
-       
-          // printf("***New Width: %d Height: %d, ratio: %f\n", *width, *height, ratio);
-            
-         roi.setWidthHeight(*width, *height);
-
           
+
+       
             
+            roi.setWidthHeight(*width, *height);
+        //   printf("***CPU*** New Width: %d New Height: %d New Length: %d topright(%d, %d)\n", *width, *height, *width * *height, roi.getTopLeftX(), roi.getTopLeftY());
+
         }
         else
         {
             printf("Divided by zero, that's a problem... ");
-            printf("Let's see: obj_offset: %d M00: %lf\n", obj_offset, M00);
+            printf("Let's see: obj_offset: %d M00: %f\n", obj_offset, M00);
             return 1000000.0;//return an unrealistically large number to show something went wrong
         }
         

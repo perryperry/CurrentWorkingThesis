@@ -380,38 +380,63 @@ __global__ void gpuCamShiftMultiObjectFinalReduce(int * d_obj_block_ends, int nu
     if(tid == 0)
     {
       int ind = 0;
-      double M00 = 0.0;
-      double M1x = 0.0;
-      double M1y = 0.0;
+      float M00 = 0.0;
+      float M1x = 0.0;
+      float M1y = 0.0;
       int newX = 0;
       int newY = 0;
       int newColOffset = 0;
       int newRowOffset = 0;
       int width = 0;
       int height = 0;
+
       for(ind = 0; ind < num_block; ind ++)
       {
           M00 += shared_sum[ind];
           M1x += shared_sum[ind + num_block];
           M1y += shared_sum[ind + num_block + num_block];
       }
-      newX = (int) ((int)M1x / (int)M00);
-      newY = (int) ((int)M1y / (int)M00);
+      newX = (int) (M1x / M00);
+      newY = (int) (M1y / M00);
 
-      newColOffset =  newX - (sub_widths[blockIdx.x] / 2);
-      newRowOffset = newY - (sub_heights[blockIdx.x] / 2);
 
+      width = ceil(2 * sqrt(M00));
+      if(width < 10)
+        width = 10;
+
+     
+      height = ceil(width * 1.1);
+
+
+      newColOffset =  newX - (width / 2); // x
+      newRowOffset = newY - (height / 2); // y
+    
+
+      int bottomRightX = newColOffset + width;
+      int bottomRightY = newRowOffset + height;
+
+      if(bottomRightX > FRAME_WIDTH - 1)
+      {
+          width = FRAME_WIDTH - newColOffset - 1;
+      }
+      if(bottomRightY > FRAME_HEIGHT - 1)
+      {
+          height = FRAME_HEIGHT - newRowOffset - 1;
+      }
+
+
+
+      sub_widths[blockIdx.x] = width;
+      sub_heights[blockIdx.x] = height;
+      subframe_length[blockIdx.x] =  width * height;
       col_offset[blockIdx.x] = (newColOffset > 0) ? newColOffset : 0;
       row_offset[blockIdx.x] = (newRowOffset > 0) ? newRowOffset : 0;
 
       cx[blockIdx.x] = newX;
       cy[blockIdx.x] = newY;
+ 
+   //printf("$$$GPU(object: %d)$$$ New Width: %d New Height: %d New Length: %d topright (%d, %d)\n", blockIdx.x, sub_widths[blockIdx.x], sub_heights[blockIdx.x], subframe_length[blockIdx.x], col_offset[blockIdx.x],  row_offset[blockIdx.x]);
 
-       width = ceil(2 * sqrt(M00));
-       sub_widths[blockIdx.x] = width;
-      height = ceil(width * 1.1);
-      sub_heights[blockIdx.x] = height;
-       subframe_length[blockIdx.x] =  width * height;
   //  printf("\nIn gpuFinalReduce Block %d: M00:%lf M1x:%lf M1y: %lf, NewX: %d NewY: %d \n", blockIdx.x, M00, M1x, M1y, newX, newY);
   }
 }
@@ -715,6 +740,8 @@ __global__ void gpuSingleKernelMeanShift(unsigned char *g_idata, float *g_odata,
         if(col_offset[0] < 0) col_offset[0] = 0;
         if(row_offset[0] < 0) row_offset[0] = 0;
         
+
+
       // printf("Inside GPU MeanShift ---> M00 = %f M1x = %f M1y = %f\n", M00, M1x, M1y);
      //  printf("Inside GPU MeanShift ---> centroid (%d, %d)  topX, topY (%d,%d)\n", newX, newY, col_offset[0], row_offset[0]  );
       }

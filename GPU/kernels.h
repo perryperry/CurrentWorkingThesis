@@ -7,6 +7,8 @@
 
 #define SHARED_SIZE_LIMIT 1024
 #define HIST_BUCKETS 60
+#define FRAME_WIDTH 1080
+#define FRAME_HEIGHT 720
 //Histogram bucket size is 60, but give it 120 for objects (for now)
 __constant__ float const_histogram[120];
 

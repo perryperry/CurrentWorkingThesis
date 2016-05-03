@@ -397,7 +397,7 @@ bool gpuMultiObjectConverged(int num_objects, int * cx, int * cy, int * prevX, i
 
 
 
-float launchMultiObjectTwoKernelCamShift(int num_objects, int num_block, d_struct ds, unsigned char * frame, int frameLength, int frame_width, int ** cx, int ** cy, int **sub_widths, int ** sub_heights, bool shouldPrint)
+float launchMultiObjectTwoKernelCamShift(int num_objects, int num_block,  int * obj_block_ends, d_struct ds, unsigned char * frame, int frameLength, int frame_width, int ** cx, int ** cy, int **sub_widths, int ** sub_heights, int * sub_lengths, bool shouldPrint)
 {
     int obj_cur = 0;  
     cudaError_t err; 
@@ -408,6 +408,7 @@ float launchMultiObjectTwoKernelCamShift(int num_objects, int num_block, d_struc
     int prevX[num_objects];
     int prevY[num_objects];
     bool * obj_converged = (bool *) malloc(sizeof(bool) * num_objects);
+
 
     for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
     {
@@ -430,7 +431,7 @@ float launchMultiObjectTwoKernelCamShift(int num_objects, int num_block, d_struc
   if(num_block <= tile_width)
   {
 
-     while(  ! gpuMultiObjectConverged(num_objects, *cx, *cy, prevX, prevY, &obj_converged, shouldPrint) )
+     while(  ! gpuMultiObjectConverged(num_objects, *cx, *cy, prevX, prevY, &obj_converged, shouldPrint))
      {
 
         for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
@@ -440,14 +441,25 @@ float launchMultiObjectTwoKernelCamShift(int num_objects, int num_block, d_struc
         }
 
         gpuMultiObjectBlockReduce<<< grid, block >>>(ds.d_obj_block_ends, num_objects, ds.d_frame, ds.d_out, ds.d_sub_lengths, num_block, frame_width, ds.d_sub_widths, ds.d_row_offset, ds.d_col_offset);
-        gpuCamShiftMultiObjectFinalReduce<<< num_objects, num_block, num_block * 3 * sizeof(float) >>>(ds.d_obj_block_ends, num_objects, ds.d_out, ds.d_cx, ds.d_sub_lengths, ds.d_cy, ds.d_row_offset, ds.d_col_offset, ds.d_sub_widths, ds.d_sub_heights, num_block);
+        gpuCamShiftMultiObjectFinalReduce<<< num_objects, num_block, num_block * 3 * sizeof(float) >>>(ds.d_obj_block_ends, num_objects, ds.d_out, ds.d_cx,  ds.d_cy, ds.d_sub_lengths, ds.d_row_offset, ds.d_col_offset, ds.d_sub_widths, ds.d_sub_heights, num_block);
      
         err =  cudaMemcpy(*cx, ds.d_cx, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
         err =  cudaMemcpy(*cy, ds.d_cy, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
-        err =  cudaMemcpy(*sub_widths, ds.d_sub_widths, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
-        err =  cudaMemcpy(*sub_heights, ds.d_sub_heights, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+        err =  cudaMemcpy(sub_lengths, ds.d_sub_lengths, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+        num_block = 0;
 
+        for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+        {
+          num_block += ceil( (float) sub_lengths[obj_cur] / (float) tile_width);
+          
+           obj_block_ends[obj_cur] = num_block;
 
+         //printf("SUB LENGTHS: %d num_block: %d\n", sub_lengths[obj_cur], num_block);
+        }
+       // printf("*********NEXT Iteration***************\n");
+        err =  cudaMemcpy(ds.d_obj_block_ends, obj_block_ends, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
+
+        grid = dim3(num_block, 1, 1);
 
    }
     cudaDeviceSynchronize();
@@ -459,6 +471,10 @@ float launchMultiObjectTwoKernelCamShift(int num_objects, int num_block, d_struc
        for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
             printf("***** GPU FINISHED FRAME: Prev->(%d, %d) and New ->(%d, %d)\n", prevX[obj_cur], prevY[obj_cur], (*cx)[obj_cur],  (*cy)[obj_cur]);
    
+
+    err =  cudaMemcpy(*sub_widths, ds.d_sub_widths, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+    err =  cudaMemcpy(*sub_heights, ds.d_sub_heights, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+
   }
   else
     printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", num_block, tile_width);

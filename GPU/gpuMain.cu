@@ -111,12 +111,15 @@ int initDeviceStruct(int num_objects, d_struct * ds, int * obj_block_ends, unsig
     float * d_out; 
     int * d_cx;
     int * d_cy;
+    int * d_prevX;
+    int * d_prevY;
     int * d_col_offset;
     int * d_row_offset;
     int * d_obj_block_ends;
     int * d_sub_widths;
     int * d_sub_lengths;
     int * d_sub_heights;
+    bool * d_converged;
     unsigned char * d_frame;
 
     int num_block = 0;
@@ -148,6 +151,14 @@ int initDeviceStruct(int num_objects, d_struct * ds, int * obj_block_ends, unsig
           printf("%s\n", cudaGetErrorString(err));
     err = cudaMemcpy(d_cy, cy, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
 
+    if((err = cudaMalloc((void **)&d_prevX, sizeof(int) * num_objects)) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+   
+    if((err = cudaMalloc((void **)&d_prevY, sizeof(int) * num_objects)) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+   
+
+
     if((err = cudaMalloc((void **)&d_row_offset, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
     err = cudaMemcpy(d_row_offset, row_offset, sizeof(int) * num_objects, cudaMemcpyHostToDevice);
@@ -172,17 +183,22 @@ int initDeviceStruct(int num_objects, d_struct * ds, int * obj_block_ends, unsig
           printf("%s\n", cudaGetErrorString(err));
     err = cudaMemcpy(d_obj_block_ends, obj_block_ends, num_objects * sizeof(int), cudaMemcpyHostToDevice);
    
+    if((err = cudaMalloc((void **)&d_converged, sizeof(bool) * num_objects)) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+
     (*ds).d_frame = d_frame;
     (*ds).d_out = d_out;
     (*ds).d_cx = d_cx;
     (*ds).d_cy = d_cy;
+    (*ds).d_prevX = d_prevX;
+    (*ds).d_prevY = d_prevY;
     (*ds).d_col_offset = d_col_offset;
     (*ds).d_row_offset = d_row_offset;
     (*ds).d_sub_lengths = d_sub_lengths;
     (*ds).d_sub_widths = d_sub_widths;
     (*ds).d_sub_heights = d_sub_heights;
     (*ds).d_obj_block_ends = d_obj_block_ends;
-
+    (*ds).d_converged = d_converged;
     return num_block;
 }
 
@@ -192,12 +208,15 @@ void freeDeviceStruct(d_struct * ds)
     cudaFree((*ds).d_out);
     cudaFree((*ds).d_cx);
     cudaFree((*ds).d_cy);
+    cudaFree((*ds).d_prevX);
+    cudaFree((*ds).d_prevY);
     cudaFree((*ds).d_row_offset);
     cudaFree((*ds).d_col_offset);
     cudaFree((*ds).d_sub_lengths);
     cudaFree((*ds).d_sub_widths);
     cudaFree((*ds).d_sub_heights);
     cudaFree((*ds).d_obj_block_ends);
+    cudaFree((*ds).d_converged);
 }
 
 //For single object tracking, but capable of toggle between tracking objects based on obj_id in main with its dimensions
@@ -282,7 +301,7 @@ float launchTwoKernelReduction(int obj_id, int num_objects, d_struct ds, unsigne
     return time;
 }
 
-int gpuDistance(int x1, int y1, int x2, int y2)
+/*int gpuDistance(int x1, int y1, int x2, int y2)
 {
     int distx = (x2 - x1) * (x2 - x1);
     int disty = (y2 - y1) * (y2 - y1);
@@ -290,7 +309,7 @@ int gpuDistance(int x1, int y1, int x2, int y2)
     double dist = sqrt(distx + disty);
     
     return (int) dist;
-}
+}*/
 
 
 /******************************************** Multi-object tracking below ****************************************************/
@@ -343,8 +362,8 @@ float launchMultiObjectTwoKernelReduction(int num_objects, int num_block, d_stru
         	prevY[obj_cur] = (*cy)[obj_cur];
         }
 
-        gpuMultiObjectBlockReduce<<< grid, block >>>(ds.d_obj_block_ends, num_objects, ds.d_frame, ds.d_out, ds.d_sub_lengths, num_block, frame_width, ds.d_sub_widths, ds.d_row_offset, ds.d_col_offset);
-        gpuMultiObjectFinalReduce<<< num_objects, num_block, num_block * 3 * sizeof(float) >>>(ds.d_obj_block_ends, num_objects, ds.d_out, ds.d_cx, ds.d_cy, ds.d_row_offset, ds.d_col_offset, ds.d_sub_widths, ds.d_sub_heights, num_block);
+        gpuMultiObjectBlockReduce<<< grid, block >>>(ds.d_obj_block_ends, num_objects, ds.d_frame, ds.d_out, ds.d_sub_lengths, num_block, frame_width, ds.d_sub_widths, ds.d_row_offset, ds.d_col_offset, ds.d_converged);
+        gpuMultiObjectFinalReduce<<< num_objects, num_block, num_block * 3 * sizeof(float) >>>(ds.d_obj_block_ends, num_objects, ds.d_out, ds.d_cx, ds.d_cy, ds.d_prevX, ds.d_prevY, ds.d_row_offset, ds.d_col_offset, ds.d_sub_widths, ds.d_sub_heights, num_block, ds.d_converged);
      
         err =  cudaMemcpy(*cx, ds.d_cx, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
         err =  cudaMemcpy(*cy, ds.d_cy, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
@@ -397,7 +416,19 @@ bool gpuMultiObjectConverged(int num_objects, int * cx, int * cy, int * prevX, i
 
 
 
-float launchMultiObjectTwoKernelCamShift(int num_objects, int * num_block,  int * obj_block_ends, d_struct ds, unsigned char * frame, int frameLength, int frame_width, int ** cx, int ** cy, int **sub_widths, int ** sub_heights, int * sub_lengths, bool shouldPrint)
+float launchMultiObjectTwoKernelCamShift(int num_objects, 
+										int * num_block,  
+										int * obj_block_ends, 
+										d_struct ds, 
+										unsigned char * frame, 
+										int frameLength, 
+										int frame_width, 
+										int ** cx, 
+										int ** cy, 
+										int ** sub_widths, 
+										int ** sub_heights, 
+										int * sub_lengths, 
+										bool shouldPrint)
 {
     int obj_cur = 0;  
     cudaError_t err; 
@@ -441,8 +472,29 @@ float launchMultiObjectTwoKernelCamShift(int num_objects, int * num_block,  int 
           prevY[obj_cur] = (*cy)[obj_cur];
         }
 
-        gpuMultiObjectBlockReduce<<< grid, block >>>(ds.d_obj_block_ends, num_objects, ds.d_frame, ds.d_out, ds.d_sub_lengths, *num_block, frame_width, ds.d_sub_widths, ds.d_row_offset, ds.d_col_offset);
-        gpuCamShiftMultiObjectFinalReduce<<< num_objects, *num_block, *num_block * 3 * sizeof(float) >>>(ds.d_obj_block_ends, num_objects, ds.d_out, ds.d_cx,  ds.d_cy, ds.d_sub_lengths, ds.d_row_offset, ds.d_col_offset, ds.d_sub_widths, ds.d_sub_heights, *num_block);
+        gpuMultiObjectBlockReduce<<< grid, block >>>(ds.d_obj_block_ends, 
+                                                      num_objects, 
+                                                      ds.d_frame, 
+                                                      ds.d_out, 
+                                                      ds.d_sub_lengths, 
+                                                      *num_block, 
+                                                      frame_width, 
+                                                      ds.d_sub_widths, 
+                                                      ds.d_row_offset, 
+                                                      ds.d_col_offset, 
+                                                      ds.d_converged);
+
+        gpuCamShiftMultiObjectFinalReduce<<< num_objects, *num_block, *num_block * 3 * sizeof(float) >>>(ds.d_obj_block_ends, 
+                                                                                                          num_objects, 
+                                                                                                          ds.d_out, 
+                                                                                                          ds.d_cx,  
+                                                                                                          ds.d_cy, 
+                                                                                                          ds.d_sub_lengths, 
+                                                                                                          ds.d_row_offset, 
+                                                                                                          ds.d_col_offset, 
+                                                                                                          ds.d_sub_widths, 
+                                                                                                          ds.d_sub_heights, 
+                                                                                                          *num_block);
      
         err =  cudaMemcpy(*cx, ds.d_cx, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
         err =  cudaMemcpy(*cy, ds.d_cy, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
@@ -491,6 +543,51 @@ float launchMultiObjectTwoKernelCamShift(int num_objects, int * num_block,  int 
       printf("Finished GPU Frame\n");
     return time;
 }
+
+
+/****************************** Dynamic parallelism BELOW **************************************/
+
+float mainDynamicCamShift(d_struct ds, int num_objects, unsigned char * frame, int frame_length, int frame_width, int ** cx, int ** cy)
+{
+    cudaEvent_t launch_begin, launch_end;
+    cudaError_t err; 
+    float time = 0;
+    cudaEventCreate(&launch_begin);
+    cudaEventCreate(&launch_end);
+    cudaEventRecord(launch_begin,0);
+    //Copy new frame into device memory
+    cudaMemcpy(ds.d_frame, frame, frame_length * sizeof(unsigned char), cudaMemcpyHostToDevice);
+    
+    dynamicCamShiftLaunchKernel<<< 1 , 1 >>>(num_objects,
+                                            ds.d_frame,
+                                            frame_length,
+                                            frame_width,
+                                            ds.d_obj_block_ends,
+                                            ds.d_out,
+                                            ds.d_sub_lengths,
+                                            ds.d_sub_widths,
+                                            ds.d_sub_heights,
+                                            ds.d_row_offset, 
+                                            ds.d_col_offset,
+                                            ds.d_cx,
+                                            ds.d_cy,
+                                            ds.d_prevX,
+                                            ds.d_prevY,
+                                            ds.d_converged);
+    
+    err =  cudaMemcpy(*cx, ds.d_cx, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+    err =  cudaMemcpy(*cy, ds.d_cy, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+
+    cudaEventRecord(launch_end,0);
+    cudaEventSynchronize(launch_end);
+    cudaEventElapsedTime(&time, launch_begin, launch_end);
+
+    return time;
+}
+
+
+
+
 
 
 

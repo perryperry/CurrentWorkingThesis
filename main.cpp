@@ -81,7 +81,7 @@ void * test(void * data)
     printf("%s\n", str);
 }
 
-void menu(int * num_objects, bool * processVid, bool * cpu, bool * gpu, bool * print, bool * bp)
+void menu(int * num_objects, bool * processVid, bool * cpu, bool * gpu, bool * print, bool * windowAdjust)
 {
     int answer = 0;
     printf("GPU vs CPU meanshift menu:\n");
@@ -100,9 +100,9 @@ void menu(int * num_objects, bool * processVid, bool * cpu, bool * gpu, bool * p
     cout << "Should print intermediate output (0/1):";
     scanf("%d", &answer);
     *print = answer;
-    cout << "Should backproject (0/1):";
+    cout << "Should adjust window size (0/1):";
     scanf("%d", &answer);
-    *bp = answer;
+    *windowAdjust = answer;
     
     if(*num_objects == 0)
         exit(-1);
@@ -114,7 +114,7 @@ int main(int argc, const char * argv[])
     //timeMemoryTransfer();
     //exit(1);
     
-    
+    bool shouldAdjustWindowSize = false;
     bool shouldProcessVideo = false;
     bool shouldCPU = false;
     bool shouldGPU = false;
@@ -123,7 +123,7 @@ int main(int argc, const char * argv[])
     int num_objects = 1;
    
     parameterCheck(argc);
-    menu(&num_objects, &shouldProcessVideo, &shouldCPU, &shouldGPU, &shouldPrint, &shouldBackProjectFrame);
+    menu(&num_objects, &shouldProcessVideo, &shouldCPU, &shouldGPU, &shouldPrint, &shouldAdjustWindowSize);
     VideoCapture cap(argv[1]);
     int x, y, x2, y2, obj_cur = 0;
     
@@ -252,17 +252,19 @@ int main(int argc, const char * argv[])
                {
                     cpu_cx = cpu_objects[obj_cur].getCenterX();
                     cpu_cy = cpu_objects[obj_cur].getCenterY();
-                   // cpu_time_cost += camShift.cpuMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
                    
-                  int width = 0, height = 0;
-                   
-                   //Cam Shift test
-                   
-                 cpu_time_cost += camShift.cpuCamShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy, &width, &height, hueLength);
-                   
-                    cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
-                   cpu_objects[obj_cur].setWidthHeight(width, height);
-                    cpu_objects[obj_cur].drawCPU_ROI(&frame);
+                    if( shouldAdjustWindowSize )
+                    {
+                       int width = 0, height = 0;
+                       cpu_time_cost += camShift.cpuCamShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy, &width, &height, hueLength);
+                       cpu_objects[obj_cur].setWidthHeight(width, height);
+                   }
+                   else
+                   {
+                       cpu_time_cost += camShift.cpuMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
+                   }
+                   cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
+                   cpu_objects[obj_cur].drawCPU_ROI(&frame);
               }
             }
             /******************************** GPU MeanShift until Convergence **********************************************/
@@ -273,25 +275,22 @@ int main(int argc, const char * argv[])
                 gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
                 gpu_objects[obj_cur].drawGPU_ROI(&frame);*/
                 
-                
-                
-                
-                
-                
-                
                 //Multi-object MeanShift
                 
-                //gpu_time_cost += launchMultiObjectTwoKernelReduction( num_objects, num_block, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, shouldPrint);
+               // gpu_time_cost += launchMultiObjectTwoKernelReduction( num_objects, num_block, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, shouldPrint);
 
                 
               //Multi-Object CamShift
-              gpu_time_cost += launchMultiObjectTwoKernelCamShift(num_objects, &num_block, obj_block_ends, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, &sub_widths, &sub_heights, subFrameLengths, shouldPrint);
+            // gpu_time_cost += launchMultiObjectTwoKernelCamShift(num_objects, &num_block, obj_block_ends, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, &sub_widths, &sub_heights, subFrameLengths, shouldPrint);
+                
+               gpu_time_cost += mainDynamicCamShift(*ds, num_objects, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy);
+                
                 
                 for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
                 {
                     gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
                      //Multi-object MeanShift
-                    gpu_objects[obj_cur].setWidthHeight(sub_widths[obj_cur], sub_heights[obj_cur]);
+                  //  gpu_objects[obj_cur].setWidthHeight(sub_widths[obj_cur], sub_heights[obj_cur]);
                     
                     gpu_objects[obj_cur].drawGPU_ROI(&frame);
                 }

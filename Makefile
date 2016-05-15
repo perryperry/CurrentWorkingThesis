@@ -4,7 +4,7 @@ BUILD/gpuMain.o: GPU/gpuMain.cu
 	nvcc -arch=sm_52 -c GPU/gpuMain.cu -I/usr/local.cuda-7.0/samples/common -I../../common/inc
 	mv gpuMain.o BUILD
 BUILD/kernels.o:	GPU/kernels.cu
-	nvcc -arch=sm_52 -c GPU/kernels.cu -I/usr/local.cuda-7.0/samples/common -I../../common/inc
+	nvcc -arch=sm_52 -rdc=true -lcudadevrt -c GPU/kernels.cu -I/usr/local.cuda-7.0/samples/common -I../../common/inc
 	mv kernels.o BUILD
 BUILD/RegionOfInterest.o: CPU/RegionOfInterest.cpp
 	g++ -c CPU/RegionOfInterest.cpp `pkg-config opencv --cflags --libs`
@@ -18,5 +18,5 @@ BUILD/main.o:	main.cpp
 clean:
 	rm BUILD/* out.mov 
 run:
-	./BUILD/gpuMeanShift INPUT/in4.mov INPUT/windows.in4
+	./BUILD/gpuMeanShift INPUT/in3.mov INPUT/windows.in3
 

@@ -59,7 +59,7 @@ void setConstantMemoryHistogram(float * histogram, int num_objects)
 
 //************** WORKING KERNELS ********************//
 
-//Kernel for meanshift of sub-window based on entire Frame
+//Kernel for camshift of sub-window based on entire Frame
 
 /*
 Finding sub-matrix index in greater matrix:
@@ -179,8 +179,18 @@ __global__ void gpuFinalReduce(int obj_id, float * g_odata, int * cx, int * cy, 
 
 /************************************************************* MULTI-Object concurrent tracking kernels ***************************************************/
 
-__global__ void gpuMultiObjectBlockReduce(int * d_obj_block_ends, int num_objects, unsigned char *g_idata, float *g_odata, int * subframe_length, int num_block, int abs_width, int * sub_widths, int * row_offset, int * col_offset)
-{
+__global__ void gpuMultiObjectBlockReduce(int * d_obj_block_ends, 
+                                          int num_objects, 
+                                          unsigned char *g_idata, 
+                                          float *g_odata, 
+                                          int * subframe_length, 
+                                          int num_block, 
+                                          int abs_width, 
+                                          int * sub_widths, 
+                                          int * row_offset, 
+                                          int * col_offset,
+                                          bool * converged){
+
   unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
 
   //*********************************************************************************/
@@ -210,11 +220,10 @@ __global__ void gpuMultiObjectBlockReduce(int * d_obj_block_ends, int num_object
   }
   __syncthreads();
 
-    i -= shared_thread_offset[0];
-  
-
-  if(i < 777600)
+  if( ! converged[shared_obj_id[0]] )
   {
+
+    i -= shared_thread_offset[0];
 
     if(i < subframe_length[shared_obj_id[0]]) 
     {
@@ -258,9 +267,9 @@ __global__ void gpuMultiObjectBlockReduce(int * d_obj_block_ends, int num_object
       g_odata[blockIdx.x + num_block] = shared_M1x[0]; 
       g_odata[blockIdx.x + (2 * num_block)] = shared_M1y[0]; 
     }
+  }
+} 
 
-  } //end limit check
-}
 
 
 __device__ int gpuBlockStart(int * d_obj_block_ends, int num_objects)
@@ -277,62 +286,91 @@ __device__ int gpuBlockStart(int * d_obj_block_ends, int num_objects)
   return prevBlockEnd;
 }
 
-__global__ void gpuMultiObjectFinalReduce(int * d_obj_block_ends, int num_objects, float *g_odata, int * cx, int * cy, int * row_offset, int * col_offset, int * sub_widths, int * sub_heights, int num_block)
+__global__ void gpuMultiObjectFinalReduce(int * d_obj_block_ends, 
+                                          int num_objects, 
+                                          float *g_odata, 
+                                          int * cx, 
+                                          int * cy,
+                                          int * prevX,
+                                          int * prevY, 
+                                          int * row_offset, 
+                                          int * col_offset, 
+                                          int * sub_widths, 
+                                          int * sub_heights, 
+                                          int num_block,
+                                          bool * converged)
 {
     extern __shared__ float shared_sum[];
+
    __shared__ int shared_block_dim[2]; //0 index == starting block, 1 index == end block
     unsigned int tid = threadIdx.x; 
-    
-     if(tid == 0){ //Calculate the starting block 
-       shared_block_dim[0] = (blockIdx.x > 0) ? d_obj_block_ends[blockIdx.x - 1]: 0;
-       shared_block_dim[1] = d_obj_block_ends[blockIdx.x];
-       // printf("*****Final reduce: Block %d, the shared obj id: %d, the shared block start: %d\n", blockIdx.x, blockIdx.x, shared_block_start[0]);
-     }
-     __syncthreads();
-    
-    if(tid >= shared_block_dim[0] && tid < shared_block_dim[1])
-    {
-      shared_sum[tid] = g_odata[tid]; //M00
-      shared_sum[tid + num_block] = g_odata[tid + num_block]; //M1x
-      shared_sum[tid + num_block + num_block] = g_odata[tid + num_block + num_block];//M1y
-    }
-    else
-   {
-     shared_sum[tid] = 0.0; //M00
-     shared_sum[tid + num_block] = 0.0; //M1x
-     shared_sum[tid + num_block + num_block] = 0.0;//M1y
-   }
-    __syncthreads();
 
-    if(tid == 0)
+    if( ! converged[blockIdx.x] )
     {
-      int ind = 0;
-      double M00 = 0.0;
-      double M1x = 0.0;
-      double M1y = 0.0;
-      int newX = 0;
-      int newY = 0;
-      int newColOffset = 0;
-      int newRowOffset = 0;
 
-      for(ind = 0; ind < num_block; ind ++)
+       if(tid == 0){ //Calculate the starting block 
+         shared_block_dim[0] = (blockIdx.x > 0) ? d_obj_block_ends[blockIdx.x - 1]: 0;
+         shared_block_dim[1] = d_obj_block_ends[blockIdx.x];
+         // printf("*****Final reduce: Block %d, the shared obj id: %d, the shared block start: %d\n", blockIdx.x, blockIdx.x, shared_block_start[0]);
+       }
+       __syncthreads();
+      
+      if(tid >= shared_block_dim[0] && tid < shared_block_dim[1])
       {
-          M00 += shared_sum[ind];
-          M1x += shared_sum[ind + num_block];
-          M1y += shared_sum[ind + num_block + num_block];
+        shared_sum[tid] = g_odata[tid]; //M00
+        shared_sum[tid + num_block] = g_odata[tid + num_block]; //M1x
+        shared_sum[tid + num_block + num_block] = g_odata[tid + num_block + num_block];//M1y
       }
-      newX = (int) ((int)M1x / (int)M00);
-      newY = (int) ((int)M1y / (int)M00);
+      else
+     {
+       shared_sum[tid] = 0.0; //M00
+       shared_sum[tid + num_block] = 0.0; //M1x
+       shared_sum[tid + num_block + num_block] = 0.0;//M1y
+     }
+      __syncthreads();
 
-      newColOffset =  newX - (sub_widths[blockIdx.x] / 2);
-      newRowOffset = newY - (sub_heights[blockIdx.x] / 2);
+      if(tid == 0)
+      {
+        int ind = 0;
+        double M00 = 0.0;
+        double M1x = 0.0;
+        double M1y = 0.0;
+        int newX = 0;
+        int newY = 0;
+        int newColOffset = 0;
+        int newRowOffset = 0;
 
-      col_offset[blockIdx.x] = (newColOffset > 0) ? newColOffset : 0;
-      row_offset[blockIdx.x] = (newRowOffset > 0) ? newRowOffset : 0;
+        for(ind = shared_block_dim[0]; ind < shared_block_dim[1]; ind ++)
+        {
+            M00 += shared_sum[ind];
+            M1x += shared_sum[ind + num_block];
+            M1y += shared_sum[ind + num_block + num_block];
+        }
+        newX = (int) ((int) M1x / (int) M00);
+        newY = (int) ((int) M1y / (int) M00);
 
-      cx[blockIdx.x] = newX;
-      cy[blockIdx.x] = newY;
-  //  printf("\nIn gpuFinalReduce Block %d: M00:%lf M1x:%lf M1y: %lf, NewX: %d NewY: %d \n", blockIdx.x, M00, M1x, M1y, newX, newY);
+        newColOffset =  newX - (sub_widths[blockIdx.x] / 2);
+        newRowOffset = newY - (sub_heights[blockIdx.x] / 2);
+
+        col_offset[blockIdx.x] = (newColOffset > 0) ? newColOffset : 0;
+        row_offset[blockIdx.x] = (newRowOffset > 0) ? newRowOffset : 0;
+
+        cx[blockIdx.x] = newX;
+        cy[blockIdx.x] = newY;
+
+        if( gpuDistance(cx[blockIdx.x], cy[blockIdx.x], prevX[blockIdx.x], prevY[blockIdx.x]) <= 1 )
+        {
+          converged[blockIdx.x] = true;
+        }
+        else
+        {
+            prevX[blockIdx.x] = cx[blockIdx.x];
+            prevY[blockIdx.x] = cy[blockIdx.x];
+        }
+
+     // printf("\nIn gpuFinalReduce Block %d: M00:%lf M1x:%lf M1y: %lf, NewX: %d NewY: %d \n", blockIdx.x, M00, M1x, M1y, newX, newY);
+    }
+
   }
 }
 
@@ -450,6 +488,101 @@ __global__ void gpuCamShiftMultiObjectFinalReduce(int * d_obj_block_ends, int nu
   }
 }
 
+__device__ int pos = 200;
+/****************************** Dynamic parallel version BELOW **************************************/
+
+__global__ void dynamicCamShiftLaunchKernel(int num_objects,      // number of objects being tracked
+                                           unsigned char * frame, // hue pixel values of the entire frame
+                                           int frame_total,       // total number of hue pixels in entire frame
+                                           int frame_width,       // width of entire frame's matrix 
+                                           int * block_ends,      // block ends buffering objects' shared memory reductions
+                                           float * g_out,         // global output array for blocks' totals
+                                           int * subframe_totals, // objects' search windows' total pixels
+                                           int * subframe_widths, // objects' search windows' widths
+                                           int * subframe_heights,// objects' search windows' heights
+                                           int * row_offset,      // objects' search windows row offset within entire frame
+                                           int * col_offset,      // objects' search windows col offset within entire frame
+                                           int * cx,
+                                           int * cy,
+                                           int * prevX,           // previous x coordinates of objects           
+                                           int * prevY,           // previous y coordinates of objects 
+                                           bool * converged)                    
+{
+  	int tile_width = 1024;
+    int num_block = 0;
+    int obj_cur = 0; 
+
+    for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+    {
+      prevX[obj_cur] = 0; 
+      prevY[obj_cur] = 0;
+      converged[obj_cur] = false;
+      num_block += ceil( (float) subframe_totals[obj_cur] / (float) tile_width);
+      block_ends[obj_cur] = num_block;
+    }
+  //  printf("NOT GOOD: %d vs %d\n", num_block, tile_width);
+    
+    dim3 block(tile_width, 1, 1);
+    dim3 grid(num_block, 1, 1);
+
+
+    if(num_block <= tile_width)
+    {
+       while( ! objectsConverged(num_objects, converged) )
+       {
+        	for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+      		{
+        		prevX[obj_cur] = cx[obj_cur];
+        		prevY[obj_cur] = cy[obj_cur];
+        	}
+
+        	gpuMultiObjectBlockReduce<<<grid, block>>>(block_ends, 
+                                                    num_objects, 
+                                                    frame, 
+                                                    g_out, 
+                                                    subframe_totals, 
+                                                    num_block, 
+                                                    frame_width, 
+                                                    subframe_widths, 
+                                                    row_offset, 
+                                                    col_offset, 
+                                                    converged);
+
+        	gpuMultiObjectFinalReduce<<< num_objects, num_block, num_block * 3 * sizeof(float) >>>(block_ends, 
+                                                                                                num_objects, 
+                                                                                                g_out, 
+                                                                                                cx, 
+                                                                                                cy,
+                                                                                                prevX,
+                                                                                                prevY, 
+                                                                                                row_offset, 
+                                                                                                col_offset, 
+                                                                                                subframe_widths, 
+                                                                                                subframe_heights, 
+                                                                                                num_block, 
+                                                                                                converged);
+        	cudaDeviceSynchronize();
+        }
+    }
+    else
+    {
+    	 printf("NOT GOOD: %d vs %d\n", num_block, tile_width);
+    }
+}
+
+
+
+__global__ void dynamicMultiObjectReduce(int num_obj,           // number of objects being tracked
+                                         unsigned char * frame, // hue pixel values of the entire frame
+                                         int frame_total,       // total number of hue pixels in entire frame
+                                         int frame_width,       // width of entire frame's matrix 
+                                         int * block_ends,      // block ends buffering objects' shared memory reductions
+                                         float * g_out,         // global output array for blocks' totals
+                                         int * subframe_totals, // objects' search windows' total pixels
+                                         int * subframe_widths, // objects' search windows' widths
+                                         int * row_offset,      // objects' search windows row offset within entire frame
+                                         int * col_offset)      // objects' search windows col offset within entire frame
+{
 
 
 
@@ -459,7 +592,37 @@ __global__ void gpuCamShiftMultiObjectFinalReduce(int * d_obj_block_ends, int nu
 
 
 
+  
+}
 
+
+
+__device__ bool objectsConverged(int num_objects, bool * obj_converged)
+{
+
+  int obj_cur;
+  int total = 0;
+  for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+  {
+    if(obj_converged[obj_cur]) //object has not converged yet
+      total ++;
+  }
+  if(total == num_objects) //All objects have finished converging
+    return true;
+  else
+    return false;
+}
+
+
+__host__ __device__ int gpuDistance(int x1, int y1, int x2, int y2)
+{
+    int distx = (x2 - x1) * (x2 - x1);
+    int disty = (y2 - y1) * (y2 - y1);
+    
+    double dist = sqrt((float)(distx + disty));
+    
+    return (int) dist;
+}
 
 
 

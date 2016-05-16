@@ -23,6 +23,8 @@ struct device_struct {
     unsigned char * d_frame;
 }; typedef struct device_struct d_struct;
 
+void printDeviceProperties();
+
 void timeMemoryTransfer();
 
 int initDeviceStruct(int num_objects, d_struct * ds, int * obj_block_ends, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset, int * subFrameLengths, int * sub_widths, int * sub_heights);

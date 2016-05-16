@@ -1,40 +1,58 @@
 #include "gpuMain.h"
 #include "kernels.h"
+#include "deviceProperties.h"
 
+//This function was taken from http://cuda-programming.blogspot.com/2013/01/how-to-query-to-devices-in-cuda-cc.html
+
+void printDeviceProperties()
+{
+    // Number of CUDA devices
+    int devCount;
+    cudaGetDeviceCount(&devCount);
+    printf("CUDA Device Query...\n");
+    printf("There are %d CUDA devices.\n", devCount);
+
+    // Iterate through devices
+    for (int i = 0; i < devCount; i++)
+    {
+        // Get device properties
+        printf("\nCUDA Device #%d\n", i);
+        cudaDeviceProp devProp;
+        cudaGetDeviceProperties(&devProp, i);
+        printDevProp(devProp);
+    }
+    printf("---------------End of Device Properties-------------\n\n");
+}
 
 void timeMemoryTransfer()
 {
 	float time = 0;
 	cudaError_t err; 
-	int num = 4;
+  printf("Enter the number of input to test memory transfer time: ");
+	int num;
+  scanf("%d", &num);
 	int * h_array = (int * )malloc(sizeof(int) * num);
 	int * d_array;
 	if(( err = cudaMalloc((void **)&d_array, num * sizeof(int))) != cudaSuccess)
           printf("%s\n", cudaGetErrorString(err));
 
-   cudaEvent_t launch_begin, launch_end;
-      
+  cudaEvent_t launch_begin, launch_end; 
 
 	cudaEventCreate(&launch_begin);
-    cudaEventCreate(&launch_end);
-    cudaEventRecord(launch_begin,0);
+  cudaEventCreate(&launch_end);
+  cudaEventRecord(launch_begin,0);
 
-     err =  cudaMemcpy(h_array, d_array, sizeof(int) * num, cudaMemcpyDeviceToHost);
+  err =  cudaMemcpy(h_array, d_array, sizeof(int) * num, cudaMemcpyDeviceToHost);
 
  	cudaDeviceSynchronize();
-    cudaEventRecord(launch_end,0);
-    cudaEventSynchronize(launch_end);
-    cudaEventElapsedTime(&time, launch_begin, launch_end);
+  cudaEventRecord(launch_end,0);
+  cudaEventSynchronize(launch_end);
+  cudaEventElapsedTime(&time, launch_begin, launch_end);
 
+  printf("Time to transfer from gpu to cpu %d elements: %f\n", num, time);
 
-
-    printf("Time to transfer from gpu to cpu %d elements: %f\n", num, time);
-
-
-
-
-      free(h_array);
-      cudaFree(d_array);
+  free(h_array);
+  cudaFree(d_array);
 }
 
 float * fillArray(int n)

@@ -30,26 +30,30 @@ int get_SP_Cores(cudaDeviceProp devProp)
 // Print device properties
 void printDevProp(cudaDeviceProp devProp)
 {
-    printf("Major revision number:         %d\n",  devProp.major);
-    printf("Minor revision number:         %d\n",  devProp.minor);
-    printf("Name:                          %s\n",  devProp.name);
-    printf("Total global memory:           %lu\n",  devProp.totalGlobalMem);
-    printf("Total shared memory per block: %lu\n",  devProp.sharedMemPerBlock);
-    printf("Total registers per block:     %d\n",  devProp.regsPerBlock);
-    printf("Warp size:                     %d\n",  devProp.warpSize);
-    printf("Maximum memory pitch:          %lu\n",  devProp.memPitch); // Maximum pitch in bytes allowed by memory copies
-    printf("Maximum threads per block:     %d\n",  devProp.maxThreadsPerBlock);
-    for (int i = 0; i < 3; ++i)
-    printf("Maximum dimension %d of block:  %d\n", i, devProp.maxThreadsDim[i]);
-    for (int i = 0; i < 3; ++i)
-    printf("Maximum dimension %d of grid:   %d\n", i, devProp.maxGridSize[i]);
-    printf("Clock rate:                    %d\n",  devProp.clockRate);
-    printf("Total constant memory:         %lu\n",  devProp.totalConstMem); //in bytes
-    printf("Texture alignment:             %lu\n",  devProp.textureAlignment);
-    printf("Concurrent copy and execution: %s\n",  (devProp.deviceOverlap ? "Yes" : "No"));
-    printf("streaming multiprocessors:     %d\n",  devProp.multiProcessorCount); //streaming multi-processors? (i.e., sm's)
-    printf("Streaming processor cores:     %d\n",  get_SP_Cores(devProp));
-    printf("Kernel execution timeout:      %s\n",  (devProp.kernelExecTimeoutEnabled ? "Yes" : "No"));
+    printf(CYNA "Major revision number:");printf(YELLOW "         %d\n",  devProp.major);
+    printf(CYNA "Minor revision number:");printf(YELLOW "         %d\n",  devProp.minor);
+    printf(CYNA "Name:");printf(YELLOW "                          %s\n",  devProp.name);
+    printf(CYNA "Total global memory:");printf(YELLOW "           %lu\n",  devProp.totalGlobalMem);
+    printf(CYNA "Total shared memory per block:");printf(YELLOW " %lu\n",  devProp.sharedMemPerBlock);
+    printf(CYNA "Total registers per block:");printf(YELLOW "     %d\n",  devProp.regsPerBlock);
+    printf(CYNA "Warp size:");printf(YELLOW "                     %d\n",  devProp.warpSize);
+    printf(CYNA "Maximum memory pitch:");printf(YELLOW "          %lu\n",  devProp.memPitch); // Maximum pitch in bytes allowed by memory copies
+    printf(CYNA "Maximum threads per block:");printf(YELLOW "     %d\n",  devProp.maxThreadsPerBlock);
+    for (int i = 0; i < 3; ++i){
+    printf(CYNA "Maximum dimension %d of block:", i);
+    printf(YELLOW "  %d\n", devProp.maxThreadsDim[i]);
+  }
+    for (int i = 0; i < 3; ++i){
+      printf(CYNA "Maximum dimension %d of grid:", i);
+      printf(YELLOW "   %d\n", devProp.maxGridSize[i]);
+    }
+    printf(CYNA "Clock rate:");printf(YELLOW "                    %d\n",  devProp.clockRate);
+    printf(CYNA "Total constant memory:");printf(YELLOW "         %lu\n",  devProp.totalConstMem); //in bytes
+    printf(CYNA "Texture alignment:");printf(YELLOW "             %lu\n",  devProp.textureAlignment);
+    printf(CYNA "Concurrent copy and execution:");printf(YELLOW " %s\n",  (devProp.deviceOverlap ? "Yes" : "No"));
+    printf(CYNA "streaming multiprocessors:");printf(YELLOW "     %d\n",  devProp.multiProcessorCount); //streaming multi-processors? (i.e., sm's)
+    printf(CYNA "Streaming processor cores:");printf(YELLOW "     %d\n",  get_SP_Cores(devProp));
+    printf(CYNA "Kernel execution timeout:");printf(YELLOW "      %s\n" RESET,  (devProp.kernelExecTimeoutEnabled ? "Yes" : "No"));
     return;
 }
 

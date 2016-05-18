@@ -17,6 +17,16 @@
 #include <chrono>
 #include <pthread.h>
 
+//print colors
+#define RESET "\033[0m"
+#define RED "\x1B[31m"
+#define GREEN "\x1B[32m"
+#define YELLOW "\x1B[33m"
+#define BLUE "\x1B[34m"
+#define MAGETA "\x1B[35m"
+#define CYNA "\x1B[36m"
+#define WHITE "\x1B[37m"
+
 using namespace cv;
 using namespace std;
 using namespace std::chrono;
@@ -28,7 +38,7 @@ void parameterCheck(int argCount)
 {
     if(argCount != 3)
     {
-        cout << "Usage: </path/to/videofile> </path/to/window/file>" << endl;
+        cout << RED "Usage: </path/to/videofile> </path/to/window/file>" RESET << endl;
         exit(-1);
     }
 }
@@ -84,30 +94,32 @@ void * test(void * data)
 void menu(int * num_objects, bool * deviceProp, bool * cpu, bool * gpu, bool * print, bool * windowAdjust)
 {
     int answer = 0;
-    printf("GPU vs CPU meanshift menu:\n");
-    cout << "Should display device properties, skip processing video(0/1):";
+    cout << YELLOW "\n##############################################################\n";
+    printf(  "GPU vs CPU meanshift menu:\n");
+    cout << CYNA "Should display device properties," << RED " SKIP" << CYNA << " processing video " << RED "(0/1):" RESET;
     scanf("%d", &answer);
     *deviceProp = answer;
     
     if(*deviceProp) //Won't process video, skip the rest of the menu options
         return;
     
-    cout << "Number of objects:";
+    cout << CYNA "Number of objects:" RED;
     scanf("%d", &answer);
     *num_objects = answer;
-    cout <<"Should run cpu version (0/1):";
+    cout <<CYNA "Should run cpu version" << RED " (0/1):";
     scanf("%d", &answer);
     *cpu = answer;
-    cout << "Should run gpu version (0/1):";
+    cout << CYNA "Should run gpu version" << RED " (0/1):";
     scanf("%d", &answer);
     *gpu = answer;
-    cout << "Should print intermediate output (0/1):";
+    cout << CYNA "Should print intermediate output" << RED " (0/1):";
     scanf("%d", &answer);
     *print = answer;
-    cout << "Should adjust window size (0/1):";
+    cout << CYNA "Should adjust window size" << RED " (0/1):";
     scanf("%d", &answer);
     *windowAdjust = answer;
-    
+    cout << YELLOW "##############################################################\n\n" RESET;
+
     if(*num_objects == 0)
         exit(-1);
 }
@@ -145,7 +157,7 @@ int main(int argc, const char * argv[])
         while (infile >> x >> y >> x2 >> y2)
         {
             if(obj_cur > num_objects){
-                cout << "ERROR: Too many lines in input file for number of objects to track!" << endl;
+                cout << RED "ERROR: Too many lines in input file for number of objects to track!" RESET<< endl;
                 exit(-1);
             }
             printf("Initializes search window #%d: (%d, %d) to (%d, %d)\n", obj_cur, x, y, x2, y2);

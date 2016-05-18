@@ -171,10 +171,10 @@ int initDeviceStruct(int num_objects, d_struct * ds, int * obj_block_ends, unsig
 
     if((err = cudaMalloc((void **)&d_prevX, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
-   
+   cudaMemset(d_prevX, 0, sizeof(int) * num_objects);
     if((err = cudaMalloc((void **)&d_prevY, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
-   
+    cudaMemset(d_prevY, 0, sizeof(int) * num_objects);
 
 
     if((err = cudaMalloc((void **)&d_row_offset, sizeof(int) * num_objects)) != cudaSuccess) 
@@ -432,21 +432,35 @@ bool gpuMultiObjectConverged(int num_objects, int * cx, int * cy, int * prevX, i
 
 
 
+bool gpuConverged(int num_objects, bool * obj_converged)
+{
 
+  int obj_cur;
+  int total = 0;
+  for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+  {
+    if(obj_converged[obj_cur]) //object has not converged yet
+      total ++;
+  }
+  if(total == num_objects) //All objects have finished converging
+    return true;
+  else
+    return false;
+}
 
 float launchMultiObjectTwoKernelCamShift(int num_objects, 
-										int * num_block,  
-										int * obj_block_ends, 
-										d_struct ds, 
-										unsigned char * frame, 
-										int frameLength, 
-										int frame_width, 
-										int ** cx, 
-										int ** cy, 
-										int ** sub_widths, 
-										int ** sub_heights, 
-										int * sub_lengths, 
-										bool shouldPrint)
+                    										int * num_block,  
+                    										int * obj_block_ends, 
+                    										d_struct ds, 
+                    										unsigned char * frame, 
+                    										int frameLength, 
+                    										int frame_width, 
+                    										int ** cx, 
+                    										int ** cy, 
+                    										int ** sub_widths, 
+                    										int ** sub_heights, 
+                    										int * sub_lengths, 
+                    										bool shouldPrint)
 {
     int obj_cur = 0;  
     cudaError_t err; 
@@ -466,7 +480,7 @@ float launchMultiObjectTwoKernelCamShift(int num_objects,
       prevY[obj_cur] = 0;
       obj_converged[obj_cur] = false;
     }
-
+    err =  cudaMemcpy( ds.d_converged, obj_converged, sizeof(bool) * num_objects, cudaMemcpyHostToDevice);
     dim3 block(tile_width, 1, 1);
     dim3 grid(*num_block, 1, 1);
 
@@ -481,7 +495,7 @@ float launchMultiObjectTwoKernelCamShift(int num_objects,
   if(*num_block <= tile_width)
   {
 
-     while(  ! gpuMultiObjectConverged(num_objects, *cx, *cy, prevX, prevY, &obj_converged, shouldPrint))
+     while(  ! gpuConverged(num_objects, obj_converged))
      {
 
         for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
@@ -506,17 +520,21 @@ float launchMultiObjectTwoKernelCamShift(int num_objects,
                                                                                                           num_objects, 
                                                                                                           ds.d_out, 
                                                                                                           ds.d_cx,  
-                                                                                                          ds.d_cy, 
+                                                                                                          ds.d_cy,
+                                                                                                          ds.d_prevX,
+                                                                                                          ds.d_prevY,                                                                                                     
                                                                                                           ds.d_sub_lengths, 
                                                                                                           ds.d_row_offset, 
                                                                                                           ds.d_col_offset, 
                                                                                                           ds.d_sub_widths, 
                                                                                                           ds.d_sub_heights, 
-                                                                                                          *num_block);
+                                                                                                          *num_block,
+                                                                                                          ds.d_converged);
      
         err =  cudaMemcpy(*cx, ds.d_cx, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
         err =  cudaMemcpy(*cy, ds.d_cy, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
         err =  cudaMemcpy(sub_lengths, ds.d_sub_lengths, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+        err =  cudaMemcpy(obj_converged, ds.d_converged, sizeof(bool) * num_objects, cudaMemcpyDeviceToHost);
         *num_block = 0;
 
         for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
@@ -536,8 +554,6 @@ float launchMultiObjectTwoKernelCamShift(int num_objects,
       printf("%s\n", cudaGetErrorString(err));
     ds.d_out = d_out;
         grid = dim3(*num_block, 1, 1);
-
-      //  printf("Grid: %d\n", num_block);
    }
     cudaDeviceSynchronize();
     cudaEventRecord(launch_end,0);

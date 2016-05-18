@@ -288,7 +288,8 @@ int main(int argc, const char * argv[])
              
                 if( shouldAdjustWindowSize )
                 {
-                    gpu_time_cost += launchMultiObjectTwoKernelCamShift(num_objects, &num_block, obj_block_ends, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, &sub_widths, &sub_heights, subFrameLengths, shouldPrint);
+                    gpu_time_cost += launchMultiObjectTwoKernelCamShift(num_objects, &num_block, obj_block_ends, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, &sub_widths,
+                                                                        &sub_heights, subFrameLengths, shouldPrint);
                 }
                 else
                 {

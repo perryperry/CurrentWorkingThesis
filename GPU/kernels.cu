@@ -395,12 +395,26 @@ __device__ int gpuCalcObjID(int * d_obj_block_ends, int num_objects)
 
 
 
-__global__ void gpuCamShiftMultiObjectFinalReduce(int * d_obj_block_ends, int num_objects, float *g_odata, int * cx, int * cy, int * subframe_length, int * row_offset, int * col_offset, int * sub_widths, int * sub_heights, int num_block)
+__global__ void gpuCamShiftMultiObjectFinalReduce(int * d_obj_block_ends, 
+                                                  int num_objects, 
+                                                  float *g_odata, 
+                                                  int * cx, 
+                                                  int * cy,
+                                                  int * prevX,
+                                                  int * prevY, 
+                                                  int * subframe_length, 
+                                                  int * row_offset, 
+                                                  int * col_offset, 
+                                                  int * sub_widths, 
+                                                  int * sub_heights, 
+                                                  int num_block, 
+                                                  bool * converged)
 {
     extern __shared__ float shared_sum[];
    __shared__ int shared_block_dim[2]; //0 index == starting block, 1 index == end block
     unsigned int tid = threadIdx.x; 
-    
+    if( ! converged[blockIdx.x] )
+    {
      if(tid == 0){ //Calculate the starting block 
        shared_block_dim[0] = (blockIdx.x > 0) ? d_obj_block_ends[blockIdx.x - 1]: 0;
        shared_block_dim[1] = d_obj_block_ends[blockIdx.x];
@@ -481,10 +495,21 @@ __global__ void gpuCamShiftMultiObjectFinalReduce(int * d_obj_block_ends, int nu
 
       cx[blockIdx.x] = newX;
       cy[blockIdx.x] = newY;
+
+       if( gpuDistance(cx[blockIdx.x], cy[blockIdx.x], prevX[blockIdx.x], prevY[blockIdx.x]) <= 1 )
+        {
+          converged[blockIdx.x] = true;
+        }
+        else
+        {
+            prevX[blockIdx.x] = cx[blockIdx.x];
+            prevY[blockIdx.x] = cy[blockIdx.x];
+        }
  
    //printf("$$$GPU(object: %d)$$$ New Width: %d New Height: %d New Length: %d topright (%d, %d)\n", blockIdx.x, sub_widths[blockIdx.x], sub_heights[blockIdx.x], subframe_length[blockIdx.x], col_offset[blockIdx.x],  row_offset[blockIdx.x]);
 
   //  printf("\nIn gpuFinalReduce Block %d: M00:%lf M1x:%lf M1y: %lf, NewX: %d NewY: %d \n", blockIdx.x, M00, M1x, M1y, newX, newY);
+  }
   }
 }
 
@@ -597,7 +622,7 @@ __global__ void dynamicMultiObjectReduce(int num_obj,           // number of obj
 
 
 
-__device__ bool objectsConverged(int num_objects, bool * obj_converged)
+__host__ __device__ bool objectsConverged(int num_objects, bool * obj_converged)
 {
 
   int obj_cur;

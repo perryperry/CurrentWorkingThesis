@@ -68,12 +68,15 @@ __global__ void gpuCamShiftMultiObjectFinalReduce(int * d_obj_block_ends,
                                                   float *g_odata,
                                                   int * cx,
                                                   int * cy,
+                                                  int * prevX,
+                                                  int * prevY,
                                                   int * subframe_length,
                                                   int * row_offset,
                                                   int * col_offset,
                                                   int * sub_widths,
                                                   int * sub_heights,
-                                                  int num_block);
+                                                  int num_block,
+                                                  bool * converged);
 
 __host__ __device__ int gpuDistance(int x1, int y1, int x2, int y2);
 
@@ -110,7 +113,7 @@ __global__ void dynamicMultiObjectReduce(int num_obj,
                                         int * row_offset,
                                         int * col_offset);
 
-__device__ bool objectsConverged(int num_objects,
+__host__ __device__ bool objectsConverged(int num_objects,
                                  bool * obj_converged);
 
 #endif

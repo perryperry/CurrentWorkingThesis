@@ -9,6 +9,8 @@
 
 struct device_struct {
     float * d_out;
+    int * d_finalX;
+    int * d_finalY;
     int * d_cx;
     int * d_cy;
     int * d_prevX;
@@ -58,7 +60,16 @@ float launchMultiObjectTwoKernelCamShift(int num_objects, int * num_block,  int 
 
 /****************************** Dynamic parallelism BELOW **************************************/
 
-float mainDynamicCamShift(d_struct ds, int num_objects, unsigned char * frame, int frame_length, int frame_width, int ** cx, int ** cy);
+float mainDynamicCamShift(d_struct ds,
+                          int num_objects,
+                          unsigned char * frame,
+                          int frame_length,
+                          int frame_width,
+                          int ** sub_widths,
+                          int ** sub_heights,
+                          int ** cx,
+                          int ** cy,
+                          bool adjust_window);
 
 
 

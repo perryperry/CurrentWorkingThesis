@@ -30,12 +30,40 @@ void RegionOfInterest::init(Point topL, Point botR, int frameWidth, int frameHei
     _centroid = calcCentroid(topL, _width, _height);
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 void RegionOfInterest::setWidthHeight(int width, int height)
 {
+    
+    if(width != _width && height != _height){
+    
     _width = width;
     _height = height;
     _topLeft = calcTopLeft(_centroid, _width, _height);
     _bottomRight = calcBottomRight(_topLeft, _width, _height);
+    }
 }
 
 int RegionOfInterest::getTotalPixels(){
@@ -54,6 +82,20 @@ void RegionOfInterest::setROI(Point centroid, int width, int height)
     _centroid = centroid;
     _width =  width;
     _height =  height;
+    
+    
+    
+    
+    
+   // printROI();
+    
+    
+    
+    
+    
+    
+    
+    
     _topLeft = calcTopLeft(centroid, width, height);
     _bottomRight = calcBottomRight(_topLeft, width, height);
 }
@@ -145,7 +187,7 @@ int RegionOfInterest::getBottomRightY()
 void RegionOfInterest::printROI()
 {
     printf("******* PRINTING ROI ***********\n");
-    printf("TopLeft --> (%d, %d) BottomRight(%d, %d)\n", _topLeft.x, _topLeft.y, _bottomRight.x, _bottomRight.y);
+    printf("TopLeft --> (%d, %d)\nBottomRight-->(%d, %d) \n Centroid(%d, %d)\n Width:%d\nHeight:%d\n", _topLeft.x, _topLeft.y, _bottomRight.x, _bottomRight.y, _centroid.x, _centroid.y, _width, _height);
     printf("******* FINISHED PRINTING ROI ***********\n");
 }
 

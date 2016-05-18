@@ -127,6 +127,8 @@ int initDeviceStruct(int num_objects, d_struct * ds, int * obj_block_ends, unsig
 
     cudaError_t err;
     float * d_out; 
+    int * d_finalX;
+    int * d_finalY;
     int * d_cx;
     int * d_cy;
     int * d_prevX;
@@ -148,7 +150,7 @@ int initDeviceStruct(int num_objects, d_struct * ds, int * obj_block_ends, unsig
     {
        num_block += ceil( (float) sub_lengths[obj_cur] / (float) tile_width);
        obj_block_ends[obj_cur] = num_block;
-         printf("SUB LENGTHS: %d sub_widths: %d sub_heights: %d Combined: %d\n", sub_lengths[obj_cur], sub_widths[obj_cur], sub_heights[obj_cur], sub_widths[obj_cur] * sub_heights[obj_cur]);
+       printf("SUB LENGTHS: %d sub_widths: %d sub_heights: %d Combined: %d\n", sub_lengths[obj_cur], sub_widths[obj_cur], sub_heights[obj_cur], sub_widths[obj_cur] * sub_heights[obj_cur]);
 
     }
 
@@ -160,6 +162,14 @@ int initDeviceStruct(int num_objects, d_struct * ds, int * obj_block_ends, unsig
     //Make d_out 3 times the block size to store M00, M1x, M1y values at a stride of num_block
     if((err = cudaMalloc((void **)&d_out, 3 * num_block * sizeof(float)))!= cudaSuccess)
         printf("%s\n", cudaGetErrorString(err));
+ 
+ if((err = cudaMalloc((void **)&d_finalX, sizeof(int) * num_objects)) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+   
+
+    if((err = cudaMalloc((void **)&d_finalY, sizeof(int) * num_objects)) != cudaSuccess) 
+          printf("%s\n", cudaGetErrorString(err));
+   
 
     if((err = cudaMalloc((void **)&d_cx, sizeof(int) * num_objects)) != cudaSuccess) 
           printf("%s\n", cudaGetErrorString(err));
@@ -206,6 +216,8 @@ int initDeviceStruct(int num_objects, d_struct * ds, int * obj_block_ends, unsig
 
     (*ds).d_frame = d_frame;
     (*ds).d_out = d_out;
+    (*ds).d_finalX = d_finalX;
+    (*ds).d_finalY = d_finalY;
     (*ds).d_cx = d_cx;
     (*ds).d_cy = d_cy;
     (*ds).d_prevX = d_prevX;
@@ -224,6 +236,8 @@ void freeDeviceStruct(d_struct * ds)
 {
     cudaFree((*ds).d_frame);
     cudaFree((*ds).d_out);
+    cudaFree((*ds).d_finalX);
+    cudaFree((*ds).d_finalY);
     cudaFree((*ds).d_cx);
     cudaFree((*ds).d_cy);
     cudaFree((*ds).d_prevX);
@@ -381,7 +395,23 @@ float launchMultiObjectTwoKernelReduction(int num_objects, int num_block, d_stru
         }
 
         gpuMultiObjectBlockReduce<<< grid, block >>>(ds.d_obj_block_ends, num_objects, ds.d_frame, ds.d_out, ds.d_sub_lengths, num_block, frame_width, ds.d_sub_widths, ds.d_row_offset, ds.d_col_offset, ds.d_converged);
-        gpuMultiObjectFinalReduce<<< num_objects, num_block, num_block * 3 * sizeof(float) >>>(ds.d_obj_block_ends, num_objects, ds.d_out, ds.d_cx, ds.d_cy, ds.d_prevX, ds.d_prevY, ds.d_row_offset, ds.d_col_offset, ds.d_sub_widths, ds.d_sub_heights, num_block, ds.d_converged);
+        gpuMultiObjectFinalReduce<<< num_objects, num_block, num_block * 3 * sizeof(float) >>>(ds.d_obj_block_ends, 
+                                                                                                num_objects, 
+                                                                                                ds.d_out,
+                                                                                                ds.d_finalX,
+                                                                                                ds.d_finalY, 
+                                                                                                ds.d_cx, 
+                                                                                                ds.d_cy, 
+                                                                                                ds.d_prevX, 
+                                                                                                ds.d_prevY, 
+                                                                                                ds.d_row_offset, 
+                                                                                                ds.d_col_offset, 
+                                                                                                ds.d_sub_widths, 
+                                                                                                ds.d_sub_heights, 
+                                                                                                ds.d_sub_lengths, 
+                                                                                                num_block, 
+                                                                                                ds.d_converged, 
+                                                                                                false);
      
         err =  cudaMemcpy(*cx, ds.d_cx, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
         err =  cudaMemcpy(*cy, ds.d_cy, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
@@ -567,7 +597,8 @@ float launchMultiObjectTwoKernelCamShift(int num_objects,
 
     err =  cudaMemcpy(*sub_widths, ds.d_sub_widths, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
     err =  cudaMemcpy(*sub_heights, ds.d_sub_heights, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
-
+     for(int i = 0; i < 2; i++)
+          printf("WIDTH: %d HIEGHT: %d\n", (*sub_widths)[i], (*sub_heights)[i]);
   }
   else
     printf("Cannot launch kernel: num_block (%d) > tile_width (%d)\n", *num_block, tile_width);
@@ -581,7 +612,16 @@ float launchMultiObjectTwoKernelCamShift(int num_objects,
 
 /****************************** Dynamic parallelism BELOW **************************************/
 
-float mainDynamicCamShift(d_struct ds, int num_objects, unsigned char * frame, int frame_length, int frame_width, int ** cx, int ** cy)
+float mainDynamicCamShift(d_struct ds, 
+                          int num_objects, 
+                          unsigned char * frame, 
+                          int frame_length, 
+                          int frame_width, 
+                          int ** sub_widths, 
+                          int ** sub_heights, 
+                          int ** cx, 
+                          int ** cy, 
+                          bool adapt_window)
 {
     cudaEvent_t launch_begin, launch_end;
     cudaError_t err; 
@@ -603,19 +643,38 @@ float mainDynamicCamShift(d_struct ds, int num_objects, unsigned char * frame, i
                                             ds.d_sub_heights,
                                             ds.d_row_offset, 
                                             ds.d_col_offset,
+                                            ds.d_finalX,
+                                            ds.d_finalY,
                                             ds.d_cx,
                                             ds.d_cy,
                                             ds.d_prevX,
                                             ds.d_prevY,
-                                            ds.d_converged);
+                                            ds.d_converged,
+                                            adapt_window);
     
-    err =  cudaMemcpy(*cx, ds.d_cx, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
-    err =  cudaMemcpy(*cy, ds.d_cy, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
+//cudaStreamSynchronize();
+    err =  cudaMemcpy(*cx, ds.d_finalX, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+    err =  cudaMemcpy(*cy, ds.d_finalY, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+
+    if(adapt_window){
+
+      err =  cudaMemcpy(*sub_widths, ds.d_sub_widths, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+      err =  cudaMemcpy(*sub_heights, ds.d_sub_heights, sizeof(int) * num_objects, cudaMemcpyDeviceToHost);
+
+     
+    }
 
     cudaEventRecord(launch_end,0);
     cudaEventSynchronize(launch_end);
     cudaEventElapsedTime(&time, launch_begin, launch_end);
-
+    for(int i = 0; i < 2; i++)
+    {
+          if((*cx)[i] > 1000 || (*cy)[i] > 1000)
+            //printf("\n\n\n&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&");
+            printf("\n\nOUTSIDE OF KERNEL (%d) --> cx: %d cy: %d WIDTH: %d HIEGHT: %d\n", i, (*cx)[i], (*cy)[i], (*sub_widths)[i], (*sub_heights)[i]);
+   
+    }
     return time;
 }
 

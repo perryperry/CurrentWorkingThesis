@@ -298,22 +298,35 @@ int main(int argc, const char * argv[])
                 gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
                 gpu_objects[obj_cur].drawGPU_ROI(&frame);*/
              
-                if( shouldAdjustWindowSize )
-                {
-                    gpu_time_cost += launchMultiObjectTwoKernelCamShift(num_objects, &num_block, obj_block_ends, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, &sub_widths,
-                                                                        &sub_heights, subFrameLengths, shouldPrint);
+                //if( shouldAdjustWindowSize )
+                //{
+                 /*   gpu_time_cost += launchMultiObjectTwoKernelCamShift(num_objects,
+                                                                        &num_block,
+                                                                        obj_block_ends,
+                                                                        *ds,
+                                                                        entireHueArray,
+                                                                        hueLength,
+                                                                        step,
+                                                                        &gpu_cx,
+                                                                        &gpu_cy,
+                                                                        &sub_widths,
+                                                                        &sub_heights,
+                                                                        subFrameLengths,
+                                                                        shouldPrint);
                 }
                 else
-                {
+                {*/
                     //Old version without dynamic parallelism
                     // gpu_time_cost += launchMultiObjectTwoKernelReduction( num_objects, num_block, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, shouldPrint);
-                    gpu_time_cost += mainDynamicCamShift(*ds, num_objects, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy);
-                }
+                    gpu_time_cost += mainDynamicCamShift(*ds, num_objects, entireHueArray, hueLength, step, &sub_widths, &sub_heights, &gpu_cx, &gpu_cy, shouldAdjustWindowSize);
+               // }
                 
                 for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
                 {
-                    gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
-                    gpu_objects[obj_cur].setWidthHeight(sub_widths[obj_cur], sub_heights[obj_cur]);
+                   // gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
+                   // gpu_objects[obj_cur].setWidthHeight(sub_widths[obj_cur], sub_heights[obj_cur]);
+                     gpu_objects[obj_cur].setROI(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]), sub_widths[obj_cur], sub_heights[obj_cur]);
+
                     gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur);
                 }
                 

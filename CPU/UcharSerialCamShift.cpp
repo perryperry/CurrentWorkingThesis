@@ -206,8 +206,8 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, int step, RegionOfIn
 
             *width = ceil(2 * sqrt(M00));
             
-            if(*width < 10)
-                *width = 10;
+            if(*width < 20)
+                *width = 100;
             
            *height = ceil(*width * 1.1);
           

@@ -149,14 +149,40 @@ void RegionOfInterest::printROI()
     printf("******* FINISHED PRINTING ROI ***********\n");
 }
 
-void RegionOfInterest::drawCPU_ROI(Mat * frame)
+//Draw the thicker roi for cpu objects, different color based on object_num to the output video
+void RegionOfInterest::drawCPU_ROI(Mat * frame, int object_num)
 {
-    rectangle(*frame, _topLeft, _bottomRight, Scalar( 0, 0, 255 ), THICKNESS + 4, 8, 0);
+    Scalar color;
+    switch ( object_num ) {
+        case 0:
+            color = Scalar(255, 0, 255);
+            break;
+        case 1:
+            color = Scalar(0, 0, 255);
+            break;
+        default:
+            color = Scalar(100, 0, 100);
+            break;
+    }
+    rectangle(*frame, _topLeft, _bottomRight, color, THICKNESS + 8, 8, 0);
     circle( *frame, _centroid, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
 }
 
-void RegionOfInterest::drawGPU_ROI(Mat * frame)
+//Draw the thinner roi for gpu objects, different color based on object_num to the output video
+void RegionOfInterest::drawGPU_ROI(Mat * frame, int object_num)
 {
-    rectangle(*frame, _topLeft, _bottomRight, Scalar( 255, 0, 0 ), THICKNESS, 8, 0);
+    Scalar color;
+    switch ( object_num ) {
+        case 0:
+            color = Scalar(255, 0, 0);
+            break;
+        case 1:
+            color = Scalar(255, 255, 0);
+            break;
+        default:
+            color = Scalar(255, 0, 255);
+            break;
+    }
+    rectangle(*frame, _topLeft, _bottomRight, color , THICKNESS, 8, 0);
     circle( *frame, _centroid, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
 }

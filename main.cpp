@@ -229,8 +229,8 @@ int main(int argc, const char * argv[])
 
         //For the initial frame, just render the initial search windows' positions
         for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
-           cpu_objects[obj_cur].drawCPU_ROI(&frame);
-            gpu_objects[obj_cur].drawGPU_ROI(&frame);
+           cpu_objects[obj_cur].drawCPU_ROI(&frame, obj_cur);
+            gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur);
             //load gpu starting values as well
             gpu_row_offset[obj_cur] = gpu_objects[obj_cur].getTopLeftY();
             gpu_col_offset[obj_cur] = gpu_objects[obj_cur].getTopLeftX();
@@ -275,7 +275,7 @@ int main(int argc, const char * argv[])
                        cpu_time_cost += camShift.cpuMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
                    }
                    cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
-                   cpu_objects[obj_cur].drawCPU_ROI(&frame);
+                   cpu_objects[obj_cur].drawCPU_ROI(&frame, obj_cur);
               }
             }
             /******************************** GPU MeanShift until Convergence **********************************************/
@@ -301,7 +301,7 @@ int main(int argc, const char * argv[])
                 {
                     gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
                     gpu_objects[obj_cur].setWidthHeight(sub_widths[obj_cur], sub_heights[obj_cur]);
-                    gpu_objects[obj_cur].drawGPU_ROI(&frame);
+                    gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur);
                 }
                 
             }

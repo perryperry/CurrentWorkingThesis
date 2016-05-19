@@ -17,7 +17,7 @@
 #include <chrono>
 #include <pthread.h>
 
-//print colors
+//prunsigned int colors
 #define RESET "\033[0m"
 #define RED "\x1B[31m"
 #define GREEN "\x1B[32m"
@@ -34,7 +34,7 @@ using namespace std::chrono;
 #define OUTPUTFILENAME "out.mov"
 #define MAXTHREADS 3
 
-void parameterCheck(int argCount)
+void parameterCheck(unsigned int argCount)
 {
     if(argCount != 3)
     {
@@ -43,28 +43,28 @@ void parameterCheck(int argCount)
     }
 }
 
-int calculateHueArrayLength(Mat frame, int * step, int * mat_rows, int * mat_cols)
+unsigned int calculateHueArrayLength(Mat frame, unsigned int * step, unsigned int * mat_rows, unsigned int * mat_cols)
 {
     Mat hsvMat;
     cvtColor(frame, hsvMat, CV_RGB2HSV);
     std::vector<cv::Mat> hsv_channels;
     split(hsvMat, hsv_channels);
     Mat hueMatrix = hsv_channels[0];
-    int total = hueMatrix.total();
+    unsigned int total = hueMatrix.total();
     *step = hueMatrix.step;
     *mat_rows = hueMatrix.rows;
     *mat_cols = hueMatrix.cols;
     return total;
 }
 
-int convertToHueArray(Mat frame, unsigned char ** hueArray)
+unsigned int convertToHueArray(Mat frame, unsigned char ** hueArray)
 {
     Mat hsvMat;
     cvtColor(frame, hsvMat, CV_RGB2HSV);
     std::vector<cv::Mat> hsv_channels;
     split(hsvMat, hsv_channels);
     Mat hueMatrix = hsv_channels[0];
-    int i = 0;
+    unsigned int i = 0;
     for(i = 0; i < hueMatrix.total(); i ++)
     {
         (*hueArray)[i]=(unsigned char) hueMatrix.data[i];
@@ -72,10 +72,10 @@ int convertToHueArray(Mat frame, unsigned char ** hueArray)
     return hueMatrix.total();
 }
 
-void printHueSum(unsigned char * entireHueArray, int hueLength)
+void printHueSum(unsigned char * entireHueArray, unsigned int hueLength)
 {
     long total = 0;
-    for(int i =0; i < hueLength; i++)
+    for(unsigned int i =0; i < hueLength; i++)
     {
         total += (int) entireHueArray[i];
     }
@@ -91,9 +91,9 @@ void * test(void * data)
     printf("%s\n", str);
 }
 
-void menu(int * num_objects, bool * deviceProp, bool * cpu, bool * gpu, bool * print, bool * windowAdjust)
+void menu(unsigned int * num_objects, bool * deviceProp, bool * cpu, bool * gpu, bool * print, bool * windowAdjust)
 {
-    int answer = 0;
+    unsigned int answer = 0;
     cout << YELLOW "\n##############################################################\n";
     printf(  "GPU vs CPU meanshift menu:\n");
     cout << CYNA "Should display device properties," << RED " SKIP" << CYNA << " processing video " << RED "(0/1):" RESET;
@@ -135,7 +135,7 @@ int main(int argc, const char * argv[])
     bool shouldGPU = false;
     bool shouldBackProjectFrame = false;
     bool shouldPrint = false;
-    int num_objects = 1;
+    unsigned int num_objects = 1;
    
     parameterCheck(argc);
     menu(&num_objects, &shouldDisplayDeviceProperties, &shouldCPU, &shouldGPU, &shouldPrint, &shouldAdjustWindowSize);
@@ -146,7 +146,7 @@ int main(int argc, const char * argv[])
     {
     
         VideoCapture cap(argv[1]);
-        int x, y, x2, y2, obj_cur = 0;
+        unsigned int x, y, x2, y2, obj_cur = 0;
         
         ifstream infile(argv[2]);
         
@@ -174,14 +174,14 @@ int main(int argc, const char * argv[])
         high_resolution_clock::time_point time1;
         high_resolution_clock::time_point time2;
         
-        int * gpu_cx = (int *) malloc(sizeof(int) * num_objects); //centroid x for gpu
-        int * gpu_cy = (int *) malloc(sizeof(int) * num_objects); //centroid y for gpu
+        unsigned int * gpu_cx = (unsigned int *) malloc(sizeof(int) * num_objects); //centroid x for gpu
+        unsigned int * gpu_cy = (unsigned int *) malloc(sizeof(int) * num_objects); //centroid y for gpu
         
         //For multi-object test
-        int * obj_block_ends = (int *) malloc(sizeof(int) * num_objects); //ending block of each object in kernel
-        int * subFrameLengths = (int *) malloc(sizeof(int) * num_objects);;
-        int * sub_widths = (int *) malloc(sizeof(int) * num_objects);;
-        int * sub_heights = (int *) malloc(sizeof(int) * num_objects);
+        unsigned int * obj_block_ends = (unsigned int *) malloc(sizeof(int) * num_objects); //ending block of each object in kernel
+        unsigned int * subFrameLengths = (unsigned int *) malloc(sizeof(int) * num_objects);;
+        unsigned int * sub_widths = (unsigned int *) malloc(sizeof(int) * num_objects);;
+        unsigned int * sub_heights = (unsigned int *) malloc(sizeof(int) * num_objects);
         
         for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
            subFrameLengths[obj_cur] = gpu_objects[obj_cur].getTotalPixels();
@@ -190,25 +190,25 @@ int main(int argc, const char * argv[])
         }
         
         
-        int cpu_cx = 0; //centroid x for cpu
-        int cpu_cy = 0; //centroid x for cpu
-        int step = 0; //The width of the entire frame
-        int mat_rows = 0, mat_cols = 0;
-        int * gpu_row_offset = (int *) malloc(sizeof(int) * num_objects); //for gpu
-        int * gpu_col_offset = (int *) malloc(sizeof(int) * num_objects); //for gpu
+        unsigned int cpu_cx = 0; //centroid x for cpu
+        unsigned int cpu_cy = 0; //centroid x for cpu
+        unsigned int step = 0; //The width of the entire frame
+        unsigned int mat_rows = 0, mat_cols = 0;
+        unsigned int * gpu_row_offset = (unsigned int *) malloc(sizeof(int) * num_objects); //for gpu
+        unsigned int * gpu_col_offset = (unsigned int *) malloc(sizeof(int) * num_objects); //for gpu
         SerialCamShift camShift;
         Mat frame, hsv;
         
         /*************************************** Open Output VideoWriter *********************************************/
         //Code for opening VideoWriter taken from http://docs.opencv.org/3.1.0/d7/d9e/tutorial_video_write.html#gsc.tab=0
         VideoWriter outputVideo = VideoWriter();
-        int ex = static_cast<int>(cap.get(CV_CAP_PROP_FOURCC));//get codec type in int form
-        // Transform from int to char via Bitwise operators
+        unsigned int ex = static_cast<int>(cap.get(CV_CAP_PROP_FOURCC));//get codec type in unsigned int form
+        // Transform from unsigned int to char via Bitwise operators
         char EXT[] = {(char)(ex & 0XFF) , (char)((ex & 0XFF00) >> 8),(char)((ex & 0XFF0000) >> 16),(char)((ex & 0XFF000000) >> 24), 0};
         Size size = Size((int) cap.get(CV_CAP_PROP_FRAME_WIDTH), (int) cap.get(CV_CAP_PROP_FRAME_HEIGHT));
         outputVideo.open(OUTPUTFILENAME, ex, cap.get(CV_CAP_PROP_FPS), size, true);
         
-        int totalFrames = 0;
+        unsigned int totalFrames = 0;
         
         if (! outputVideo.isOpened()){
             cout  << "Could not open the output video for write."<< endl;
@@ -229,7 +229,7 @@ int main(int argc, const char * argv[])
         /************************************* First Frame initialize and process ****************************************/
         cap.read(frame);
         float * histogram = (float *) calloc(sizeof(float), BUCKETS * num_objects);
-        int hueLength = calculateHueArrayLength(frame, &step, &mat_rows, &mat_cols);
+        unsigned int hueLength = calculateHueArrayLength(frame, &step, &mat_rows, &mat_cols);
         
         printf("Mat: rows: %d cols: %d\n", mat_rows, mat_cols);
         unsigned char * entireHueArray = (unsigned char *) malloc(sizeof(unsigned char) * hueLength);
@@ -252,18 +252,18 @@ int main(int argc, const char * argv[])
         outputVideo.write(frame);
   
         //gpu device struct for kernel memory re-use
-        int num_block = initDeviceStruct(num_objects,
-                                         ds,
-                                         obj_block_ends,
-                                         entireHueArray,
-                                         hueLength,
-                                         gpu_cx,
-                                         gpu_cy,
-                                         gpu_col_offset,
-                                         gpu_row_offset,
-                                         subFrameLengths,
-                                         sub_widths,
-                                         sub_heights);
+        unsigned int num_block = initDeviceStruct(num_objects,
+                                                 ds,
+                                                 obj_block_ends,
+                                                 entireHueArray,
+                                                 hueLength,
+                                                 gpu_cx,
+                                                 gpu_cy,
+                                                 gpu_col_offset,
+                                                 gpu_row_offset,
+                                                 subFrameLengths,
+                                                 sub_widths,
+                                                 sub_heights);
 
        while(cap.read(frame))
        {
@@ -278,7 +278,7 @@ int main(int argc, const char * argv[])
                    
                     if( shouldAdjustWindowSize )
                     {
-                       int width = 0, height = 0;
+                       unsigned int width = 0, height = 0;
                        cpu_time_cost += camShift.cpuCamShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy, &width, &height, hueLength);
                        cpu_objects[obj_cur].setWidthHeight(width, height);
                    }
@@ -293,40 +293,22 @@ int main(int argc, const char * argv[])
             /******************************** GPU MeanShift until Convergence **********************************************/
             if(shouldGPU)
             {
-               /* obj_cur = 1; //Single object old version
-                gpu_time_cost += launchTwoKernelReduction(obj_cur, num_objects, *ds, entireHueArray, hueLength, gpu_objects[obj_cur].getTotalPixels(), step, gpu_objects[obj_cur]._width, gpu_objects[obj_cur]._height, &gpu_cx , &gpu_cy, shouldPrint);
-                gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
-                gpu_objects[obj_cur].drawGPU_ROI(&frame);*/
+                gpu_time_cost += gpuCamShift(
+                                            *ds,
+                                            num_objects,
+                                            entireHueArray,
+                                            hueLength,
+                                            step,
+                                            &sub_widths,
+                                            &sub_heights,
+                                            &gpu_cx,
+                                            &gpu_cy,
+                                            shouldAdjustWindowSize);
              
-                //if( shouldAdjustWindowSize )
-                //{
-                 /*   gpu_time_cost += launchMultiObjectTwoKernelCamShift(num_objects,
-                                                                        &num_block,
-                                                                        obj_block_ends,
-                                                                        *ds,
-                                                                        entireHueArray,
-                                                                        hueLength,
-                                                                        step,
-                                                                        &gpu_cx,
-                                                                        &gpu_cy,
-                                                                        &sub_widths,
-                                                                        &sub_heights,
-                                                                        subFrameLengths,
-                                                                        shouldPrint);
-                }
-                else
-                {*/
-                    //Old version without dynamic parallelism
-                    // gpu_time_cost += launchMultiObjectTwoKernelReduction( num_objects, num_block, *ds, entireHueArray, hueLength, step, &gpu_cx, &gpu_cy, shouldPrint);
-                    gpu_time_cost += mainDynamicCamShift(*ds, num_objects, entireHueArray, hueLength, step, &sub_widths, &sub_heights, &gpu_cx, &gpu_cy, shouldAdjustWindowSize);
-               // }
-                
                 for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
                 {
-                   // gpu_objects[obj_cur].setCentroid(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]));
-                   // gpu_objects[obj_cur].setWidthHeight(sub_widths[obj_cur], sub_heights[obj_cur]);
-                     gpu_objects[obj_cur].setROI(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]), sub_widths[obj_cur], sub_heights[obj_cur]);
-
+                    //printf("OUTSIDE OF KERNEL (%d) --> cx: %d cy: %d WIDTH: %d HEIGHT: %d\n", obj_cur, gpu_cx[obj_cur], gpu_cy[obj_cur], sub_widths[obj_cur], sub_heights[obj_cur]);
+                    gpu_objects[obj_cur].setROI(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]), sub_widths[obj_cur], sub_heights[obj_cur]);
                     gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur);
                 }
                 
@@ -344,11 +326,10 @@ int main(int argc, const char * argv[])
          }//end while
         float gpu_average_time_cost = gpu_time_cost / ((float) totalFrames);
         float cpu_average_time_cost = cpu_time_cost / ((float) totalFrames);
-        printf("GPU average time cost in milliseconds: %f\n", gpu_average_time_cost);
-        printf("CPU average time cost in milliseconds: %f\n", cpu_average_time_cost);
+        printf(RED "GPU average time cost in milliseconds: "); printf(YELLOW "%f\n", gpu_average_time_cost);
+        printf(RED "CPU average time cost in milliseconds: "); printf(YELLOW "%f\n", cpu_average_time_cost);
         if(shouldGPU)
-            printf("Speed-up: %f\n", cpu_average_time_cost/ gpu_average_time_cost);
-        
+            printf(RED "Speed-up: "); printf( YELLOW "%f\n", cpu_average_time_cost/ gpu_average_time_cost);
         
         //clean-up
         outputVideo.release();
@@ -367,6 +348,6 @@ int main(int argc, const char * argv[])
         
     }//end should not display device properties
     
-    printf("Program exited successfully\n");
+    printf(MAGETA "Program exited successfully\n" RESET);
     return 0;
 }

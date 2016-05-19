@@ -8,7 +8,7 @@
 #include "UcharSerialCamShift.hpp"
 
 
-void SerialCamShift::createHistogram(unsigned char * entireHueArray, int step, RegionOfInterest cpu_objects[], float ** histogram, int num_objects)
+void SerialCamShift::createHistogram(unsigned char * entireHueArray, unsigned int step, RegionOfInterest cpu_objects[], float ** histogram, unsigned int num_objects)
 {
     unsigned int hue = 0;
     float total_pixels = 0;
@@ -36,12 +36,12 @@ void SerialCamShift::createHistogram(unsigned char * entireHueArray, int step, R
     }
 }
 
-void SerialCamShift::backProjectHistogram(unsigned char * hsv, int step, Mat * frame, RegionOfInterest roi, float * histogram)
+void SerialCamShift::backProjectHistogram(unsigned char * hsv, unsigned int step, Mat * frame, RegionOfInterest roi, float * histogram)
 {
-    int hue = 0, count = 0;
-    for(int col = 0; col < roi._width; col ++)
+    unsigned int hue = 0, count = 0;
+    for(unsigned int col = 0; col < roi._width; col ++)
     {
-        for(int row = 0; row < roi._height; row++)
+        for(unsigned int row = 0; row < roi._height; row++)
         {
             hue = hsv[roi._width * row + col];
             (*frame).at<Vec3b>( row + roi.getTopLeftY(), col + roi.getTopLeftX() )[0] = (int) (255 * histogram[hue / BUCKET_WIDTH]);
@@ -51,10 +51,10 @@ void SerialCamShift::backProjectHistogram(unsigned char * hsv, int step, Mat * f
     }
 }
 
-void SerialCamShift::printHistogram(float * histogram, int length)
+void SerialCamShift::printHistogram(float * histogram, unsigned int length)
 {
     printf("********** PRINTING HISTOGRAM **********\n");
-    int i = 0;
+    unsigned int i = 0;
     for(i =0; i < length; i++)
     {
         printf("%d) %f, ", i, histogram[i]);
@@ -68,7 +68,7 @@ void SerialCamShift::printHistogram(float * histogram, int length)
      printf("\n********** FINISHED PRINTING HISTOGRAM **********\n");
 }
 
-int distance(int x1, int y1, int x2, int y2)
+unsigned int distance(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2)
 {
     unsigned int distx = (x2 - x1) * (x2 - x1);
     unsigned int disty = (y2 - y1) * (y2 - y1);
@@ -78,20 +78,20 @@ int distance(int x1, int y1, int x2, int y2)
     return (int) dist;
 }
 
-float SerialCamShift::cpuMeanShift(unsigned char * hueArray, int step, RegionOfInterest roi, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy)
+float SerialCamShift::cpuMeanShift(unsigned char * hueArray, unsigned int step, RegionOfInterest roi, unsigned int obj_index, float * histogram, bool shouldPrint, unsigned int * cpu_cx, unsigned int * cpu_cy)
 {
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
     float M00 = 0.0, M1x = 0.0, M1y = 0.0;
-    int hue = 0;
+    unsigned int hue = 0;
     float probability = 0.0;
-    int prevX = 0;
-    int prevY = 0;
+    unsigned int prevX = 0;
+    unsigned int prevY = 0;
     time1 = high_resolution_clock::now();
     
     Point topLeft = roi.getTopLeft();
     Point bottomRight = roi.getBottomRight();
-    int obj_offset = obj_index * BUCKETS; //offset to the next object's segment of the histogram
+    unsigned int obj_offset = obj_index * BUCKETS; //offset to the next object's segment of the histogram
     
     while(distance(prevX, prevY, cpu_cx[0], cpu_cy[0]) > 1)
     {
@@ -102,9 +102,9 @@ float SerialCamShift::cpuMeanShift(unsigned char * hueArray, int step, RegionOfI
         prevX = cpu_cx[0];
         prevY = cpu_cy[0];
         
-        for(int col = roi.getTopLeftX(); col < roi.getBottomRightX();col++)
+        for(unsigned int col = roi.getTopLeftX(); col < roi.getBottomRightX();col++)
         {
-            for(int row = roi.getTopLeftY(); row < roi.getBottomRightY();row++)
+            for(unsigned int row = roi.getTopLeftY(); row < roi.getBottomRightY();row++)
             {
                 hue = hueArray[step * row + col];
                 probability = histogram[(hue / BUCKET_WIDTH) + obj_offset];
@@ -142,7 +142,7 @@ float SerialCamShift::cpuMeanShift(unsigned char * hueArray, int step, RegionOfI
 
 
 
-float SerialCamShift::cpuCamShift(unsigned char * hueArray, int step, RegionOfInterest roi, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy, int * width, int * height, int hueLength)
+float SerialCamShift::cpuCamShift(unsigned char * hueArray, unsigned int step, RegionOfInterest roi, unsigned int obj_index, float * histogram, bool shouldPrint, unsigned int * cpu_cx, unsigned int * cpu_cy, unsigned int * width, unsigned int * height, unsigned int hueLength)
 {
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
@@ -166,9 +166,9 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, int step, RegionOfIn
         prevX = cpu_cx[0];
         prevY = cpu_cy[0];
      
-        for(int col = roi.getTopLeftX(); col < roi.getBottomRightX();col++)
+        for(unsigned int col = roi.getTopLeftX(); col < roi.getBottomRightX();col++)
         {
-            for(int row = roi.getTopLeftY(); row < roi.getBottomRightY();row++)
+            for(unsigned int row = roi.getTopLeftY(); row < roi.getBottomRightY();row++)
             {
                 if(step * row + col < hueLength)
                 {

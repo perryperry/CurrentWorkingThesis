@@ -1,11 +1,11 @@
-gpu: BUILD/kernels.o BUILD/deviceProperties.o BUILD/gpuMain.o BUILD/main.o BUILD/RegionOfInterest.o BUILD/UcharSerialCamShift.o
-	nvcc -arch=sm_52 BUILD/kernels.o BUILD/deviceProperties.o BUILD/gpuMain.o BUILD/RegionOfInterest.o BUILD/UcharSerialCamShift.o BUILD/main.o -o BUILD/gpuMeanShift `pkg-config opencv --cflags --libs` -lpthread
+gpu: BUILD/dynamicCamShift.o BUILD/deviceProperties.o BUILD/gpuMain.o BUILD/main.o BUILD/RegionOfInterest.o BUILD/UcharSerialCamShift.o
+	nvcc -arch=sm_52 BUILD/dynamicCamShift.o BUILD/deviceProperties.o BUILD/gpuMain.o BUILD/RegionOfInterest.o BUILD/UcharSerialCamShift.o BUILD/main.o -o BUILD/gpuMeanShift `pkg-config opencv --cflags --libs` -lpthread
 BUILD/gpuMain.o: GPU/gpuMain.cu
 	nvcc -arch=sm_52 -c GPU/gpuMain.cu -I/usr/local.cuda-7.0/samples/common -I../../common/inc
 	mv gpuMain.o BUILD
-BUILD/kernels.o:	GPU/kernels.cu
-	nvcc -arch=sm_52 -rdc=true -lcudadevrt -c GPU/kernels.cu -I/usr/local.cuda-7.0/samples/common -I../../common/inc
-	mv kernels.o BUILD
+BUILD/dynamicCamShift.o: GPU/dynamicCamShift.cu
+	nvcc -arch=sm_52 -rdc=true -lcudadevrt -c GPU/dynamicCamShift.cu -I/usr/local.cuda-7.0/samples/common -I../../common/inc
+	mv dynamicCamShift.o BUILD
 BUILD/deviceProperties.o:	GPU/deviceProperties.cu
 	nvcc -arch=sm_52 -c GPU/deviceProperties.cu -I/usr/local.cuda-7.0/samples/common -I../../common/inc
 	mv deviceProperties.o BUILD

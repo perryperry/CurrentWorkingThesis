@@ -26,17 +26,17 @@ class SerialCamShift
 {
 
 public:
-    void createHistogram(unsigned char * entireHueArray, int step, RegionOfInterest cpu_objects[], float ** histogram, int num_objects);
+    void createHistogram(unsigned char * entireHueArray, unsigned int step, RegionOfInterest cpu_objects[], float ** histogram, unsigned int num_objects);
 
-    void printHistogram(float * histogram, int length);
+    void printHistogram(float * histogram, unsigned int length);
     
-    void backProjectHistogram(unsigned char * hsv, int step, Mat * frame, RegionOfInterest roi, float * histogram);
+    void backProjectHistogram(unsigned char * hsv, unsigned int step, Mat * frame, RegionOfInterest roi, float * histogram);
     
-    float cpuMeanShift(unsigned char * hueArray, int step, RegionOfInterest cpu_objects, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy);
+    float cpuMeanShift(unsigned char * hueArray, unsigned int step, RegionOfInterest cpu_objects, unsigned int obj_index, float * histogram, bool shouldPrint, unsigned int * cpu_cx, unsigned int * cpu_cy);
     
-    float cpuCamShift(unsigned char * hueArray, int step, RegionOfInterest cpu_objects, int obj_index, float * histogram, bool shouldPrint, int * cpu_cx, int * cpu_cy, int * width, int * height, int hueLength);
+    float cpuCamShift(unsigned char * hueArray, unsigned int step, RegionOfInterest cpu_objects, unsigned int obj_index, float * histogram, bool shouldPrint, unsigned int * cpu_cx, unsigned int * cpu_cy, unsigned int * width, unsigned int * height, unsigned int hueLength);
 };
 
-int distance(int x1, int y1, int x2, int y2);
+unsigned int distance(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2);
 
 #endif /* SerialCamShift_hpp */

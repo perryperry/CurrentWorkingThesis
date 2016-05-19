@@ -7,21 +7,18 @@
 #include <float.h>
 #include <math.h>
 
-struct device_struct {
-    float * d_out;
-    int * d_finalX;
-    int * d_finalY;
-    int * d_cx;
-    int * d_cy;
-    int * d_prevX;
-    int * d_prevY;
-    int * d_col_offset;
-    int * d_row_offset;
-    int * d_sub_lengths;
-    int * d_sub_widths;
-    int * d_sub_heights;
-    int * d_obj_block_ends;
-    bool * d_converged;
+struct device_struct
+{
+    unsigned int *  d_cx;
+    unsigned int *  d_cy;
+    unsigned int *  d_prevX;
+    unsigned int *  d_prevY;
+    unsigned int *  d_col_offset;
+    unsigned int *  d_row_offset;
+    unsigned int *  d_sub_widths;
+    unsigned int *  d_sub_heights;
+    unsigned int *  d_sub_lengths;
+    unsigned int *  d_block_ends;
     unsigned char * d_frame;
 }; typedef struct device_struct d_struct;
 
@@ -29,47 +26,35 @@ void printDeviceProperties();
 
 void timeMemoryTransfer();
 
-int initDeviceStruct(int num_objects, d_struct * ds, int * obj_block_ends, unsigned char * frame, int frameLength, int * cx, int * cy, int * col_offset, int * row_offset, int * subFrameLengths, int * sub_widths, int * sub_heights);
+unsigned int initDeviceStruct(
+unsigned int num_objects,
+d_struct * ds,
+unsigned int * block_ends,
+unsigned char * frame,
+unsigned int frameLength,
+unsigned int * cx,
+unsigned int * cy,
+unsigned int * col_offset,
+unsigned int * row_offset,
+unsigned int * subFrameLengths,
+unsigned int * sub_widths,
+unsigned int * sub_heights);
 
 void freeDeviceStruct(d_struct * ds);
 
-void reverseIt(float * histogram);
+void mainConstantMemoryHistogramLoad(float * histogram, unsigned int num_objects);
 
-float * fillArray(int n);
-
-void printArray(float *arr, int n);
-
-float cpuReduce(float * h_in, int n);
-
-void mainConstantMemoryHistogramLoad(float * histogram, int num_objects);
-
-float launchTwoKernelReduction(int obj_id, int num_objects, d_struct ds, unsigned char * frame, int frameLength, int subFrameLength, int abs_width, int sub_width, int sub_height, int ** cx, int ** cy, bool shouldPrint);
-
-//int gpuDistance(int x1, int y1, int x2, int y2);
-
-/******************************************** Multi-object tracking below ****************************************************/
-
-float launchMultiObjectTwoKernelReduction(int num_objects, int num_block, d_struct ds, unsigned char * frame, int frameLength, int frame_width, int ** cx, int ** cy, bool shouldPrint);
-
-bool gpuMultiObjectConverged(int num_objects, int * cx, int * cy, int * prevX, int * prevY, bool ** obj_converged, bool shouldPrint);
-
-
-float launchMultiObjectTwoKernelCamShift(int num_objects, int * num_block,  int * obj_block_ends, d_struct ds, unsigned char * frame, int frameLength, int frame_width, int ** cx, int ** cy, int ** sub_widths, int ** sub_heights, int * sub_lengths, bool shouldPrint);
-
-
-
-/****************************** Dynamic parallelism BELOW **************************************/
-
-float mainDynamicCamShift(d_struct ds,
-                          int num_objects,
-                          unsigned char * frame,
-                          int frame_length,
-                          int frame_width,
-                          int ** sub_widths,
-                          int ** sub_heights,
-                          int ** cx,
-                          int ** cy,
-                          bool adjust_window);
+float gpuCamShift(
+d_struct ds,
+unsigned int num_objects,
+unsigned char * frame,
+unsigned int frame_length,
+unsigned int frame_width,
+unsigned int ** sub_widths,
+unsigned int ** sub_heights,
+unsigned int ** cx,
+unsigned int ** cy,
+bool adjust_window);
 
 
 

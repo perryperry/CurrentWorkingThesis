@@ -177,8 +177,6 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, unsigned int step, R
                     M00 += probability;
                     M1x += ((float)col) * probability;
                     M1y += ((float)row) * probability;
-                   //M2x += (col * col * probability);
-                    //M2y += (row * row * probability);
                 }
                 else{
                     printf("Problem: %d %d\n", roi.getBottomRightX(), roi.getBottomRightY());
@@ -192,30 +190,14 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, unsigned int step, R
             cpu_cx[0] = cx;
             cpu_cy[0] = cy;
             roi.setCentroid(Point( cpu_cx[0], cpu_cy[0] ));
-           
-    
-            
-           /* ratio = (M2x / ((cx * cx))) / (M2y / ((cy * cy)));
-       
-            *width = ceil(sqrt(2 * M00) * ratio);
-            *height = ceil(sqrt(2 * M00) / ratio);
-        
-            printf("***********Ratio: %f Width: %d Height: %d************\n", ratio, *width, *height);
-            roi.setWidthHeight(*width, *height);
-            roi.printROI();*/
-
+     
             *width = ceil(2 * sqrt(M00));
             
-            if(*width < 20)
-                *width = 100;
+           if(*width < 20)
+                *width = 200;
             
            *height = ceil(*width * 1.1);
-          
-
-       
-            
             roi.setWidthHeight(*width, *height);
-        //   printf("***CPU*** New Width: %d New Height: %d New Length: %d topright(%d, %d)\n", *width, *height, *width * *height, roi.getTopLeftX(), roi.getTopLeftY());
 
         }
         else
@@ -231,26 +213,9 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, unsigned int step, R
         }
         
     }//end of converging
-    
-    
-    
     if(shouldPrint)
         printf("************* CPU FINISHED A FRAME FOR OBJECT %d ***********\n", obj_index);
     time2 = high_resolution_clock::now();
     auto cpu_duration = duration_cast<duration<double>>( time2 - time1 ).count();
     return (float)(cpu_duration * 1000.0); //convert to milliseconds
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -226,7 +226,7 @@ int main(int argc, const char * argv[])
     bool shouldDisplayDeviceProperties = false;
     bool shouldCPU = false;
     bool shouldGPU = false;
-    bool shouldBackProjectFrame = false;
+    bool shouldBackProjectFrame = true;
     bool shouldPrint = false;
     unsigned int num_objects = 1;
    
@@ -349,8 +349,8 @@ int main(int argc, const char * argv[])
 
             //For the initial frame, just render the initial search windows' positions
             for(obj_cur = 0; obj_cur < num_objects; obj_cur++){
-               cpu_objects[obj_cur].drawCPU_ROI(&frame, obj_cur);
-                gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur);
+               cpu_objects[obj_cur].drawCPU_ROI(&frame, obj_cur, 0);
+                gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur, 0);
                 //load gpu starting values as well
                 gpu_row_offset[obj_cur] = gpu_objects[obj_cur].getTopLeftY();
                 gpu_col_offset[obj_cur] = gpu_objects[obj_cur].getTopLeftX();
@@ -377,7 +377,7 @@ int main(int argc, const char * argv[])
         outputVideo.write(frame);
         
         int frame_count = 1;
-        
+        float cpu_angle = 0;
        while(cap.read(frame))
        {
             hueLength = convertToHueArray(frame, &entireHueArray);
@@ -392,7 +392,19 @@ int main(int argc, const char * argv[])
                     if( shouldAdjustWindowSize )
                     {
                        unsigned int width = 0, height = 0;
-                       cpu_time_cost += camShift.cpuCamShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy, &width, &height, hueLength);
+                       cpu_time_cost += camShift.cpuCamShift(entireHueArray,
+                                                             step,
+                                                             cpu_objects[obj_cur],
+                                                             obj_cur,
+                                                             histogram,
+                                                             shouldPrint,
+                                                             &cpu_cx,
+                                                             &cpu_cy,
+                                                             &width,
+                                                             &height,
+                                                             hueLength,
+                                                             &cpu_angle);
+                        
                        cpu_objects[obj_cur].setWidthHeight(width, height);
                    }
                    else
@@ -400,7 +412,7 @@ int main(int argc, const char * argv[])
                        cpu_time_cost += camShift.cpuMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
                    }
                    cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
-                   cpu_objects[obj_cur].drawCPU_ROI(&frame, obj_cur);
+                   cpu_objects[obj_cur].drawCPU_ROI(&frame, obj_cur, cpu_angle);
               }
             }
             /******************************** GPU MeanShift until Convergence **********************************************/
@@ -422,15 +434,15 @@ int main(int argc, const char * argv[])
                 {
                     //printf("OUTSIDE OF KERNEL (%d) --> cx: %d cy: %d WIDTH: %d HEIGHT: %d\n", obj_cur, gpu_cx[obj_cur], gpu_cy[obj_cur], sub_widths[obj_cur], sub_heights[obj_cur]);
                     gpu_objects[obj_cur].setROI(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]), sub_widths[obj_cur], sub_heights[obj_cur]);
-                    gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur);
+                    gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur, 10);
                 }
                 
             }
             /******************************** Write to Output Video *******************************************/
             if(shouldBackProjectFrame){
-               /* if(shouldCPU)
-                    camShift.backProjectHistogram(hueArray, frame.step, &frame, cpu_objects[obj_cur], histogram);
-                if(shouldGPU)
+                if(shouldCPU)
+                    camShift.backProjectHistogram(entireHueArray, step, &frame, cpu_objects[0], histogram);
+               /* if(shouldGPU)
                     camShift.backProjectHistogram(hueArray, frame.step, &frame, gpu_objects[obj_cur], histogram);*/
            }
            printf(BLUE "Frame #%d processed\n", frame_count++);

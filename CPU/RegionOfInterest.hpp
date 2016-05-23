@@ -30,8 +30,8 @@ public:
     RegionOfInterest();
     void init(Point topR, Point botL, int fWidth, int fHeight);
     void setWidthHeight(int width, int height);
-    void drawCPU_ROI(Mat * frame, int obj_num);
-    void drawGPU_ROI(Mat * frame, int obj_num);
+    void drawCPU_ROI(Mat * frame, int obj_num, float angle);
+    void drawGPU_ROI(Mat * frame, int obj_num, float angle);
     void setCentroid(Point centroid);
     void setROI(Point centroid, int width, int height);
     Point getTopLeft();

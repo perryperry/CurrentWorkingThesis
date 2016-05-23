@@ -32,28 +32,6 @@ void RegionOfInterest::init(Point topL, Point botR, int frameWidth, int frameHei
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 void RegionOfInterest::setWidthHeight(int width, int height)
 {
     
@@ -82,20 +60,6 @@ void RegionOfInterest::setROI(Point centroid, int width, int height)
     _centroid = centroid;
     _width =  width;
     _height =  height;
-    
-    
-    
-    
-    
-   // printROI();
-    
-    
-    
-    
-    
-    
-    
-    
     _topLeft = calcTopLeft(centroid, width, height);
     _bottomRight = calcBottomRight(_topLeft, width, height);
 }
@@ -192,7 +156,7 @@ void RegionOfInterest::printROI()
 }
 
 //Draw the thicker roi for cpu objects, different color based on object_num to the output video
-void RegionOfInterest::drawCPU_ROI(Mat * frame, int object_num)
+void RegionOfInterest::drawCPU_ROI(Mat * frame, int object_num, float angle)
 {
     Scalar color;
     switch ( object_num ) {
@@ -206,12 +170,23 @@ void RegionOfInterest::drawCPU_ROI(Mat * frame, int object_num)
             color = Scalar(100, 0, 100);
             break;
     }
-    rectangle(*frame, _topLeft, _bottomRight, color, THICKNESS + 8, 8, 0);
+
+    RotatedRect rRect = RotatedRect(_centroid, Size2f(_width, _height), angle);
+    
+    Point2f vertices[4];
+    rRect.points(vertices);
+    for (int i = 0; i < 4; i++)
+        line(*frame, vertices[i], vertices[(i+1)%4], color, THICKNESS + 8, 8, 0);
+    
+    
+    
+    
+   // rectangle(*frame, _topLeft, _bottomRight, color, THICKNESS + 8, 8, 0);
     circle( *frame, _centroid, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
 }
 
 //Draw the thinner roi for gpu objects, different color based on object_num to the output video
-void RegionOfInterest::drawGPU_ROI(Mat * frame, int object_num)
+void RegionOfInterest::drawGPU_ROI(Mat * frame, int object_num, float angle)
 {
     Scalar color;
     switch ( object_num ) {
@@ -225,6 +200,15 @@ void RegionOfInterest::drawGPU_ROI(Mat * frame, int object_num)
             color = Scalar(255, 0, 255);
             break;
     }
-    rectangle(*frame, _topLeft, _bottomRight, color , THICKNESS, 8, 0);
+    
+    RotatedRect rRect = RotatedRect(_centroid, Size2f(_width, _height), angle);
+    
+    Point2f vertices[4];
+    rRect.points(vertices);
+    for (int i = 0; i < 4; i++)
+        line(*frame, vertices[i], vertices[(i+1)%4], color, THICKNESS, 8, 0);
+
+    
+   // rectangle(*frame, _topLeft, _bottomRight, color , THICKNESS, 8, 0);
     circle( *frame, _centroid, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
 }

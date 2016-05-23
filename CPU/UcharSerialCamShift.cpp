@@ -1,4 +1,4 @@
-//
+////
 //  SerialCamShift.cpp
 //  ThesisSerialCamShift
 //
@@ -6,7 +6,7 @@
 //  Copyright © 2016 Matthew Perry. All rights reserved.
 //
 #include "UcharSerialCamShift.hpp"
-
+#define PI 3.14159265
 
 void SerialCamShift::createHistogram(unsigned char * entireHueArray, unsigned int step, RegionOfInterest cpu_objects[], float ** histogram, unsigned int num_objects)
 {
@@ -39,14 +39,16 @@ void SerialCamShift::createHistogram(unsigned char * entireHueArray, unsigned in
 void SerialCamShift::backProjectHistogram(unsigned char * hsv, unsigned int step, Mat * frame, RegionOfInterest roi, float * histogram)
 {
     unsigned int hue = 0, count = 0;
-    for(unsigned int col = 0; col < roi._width; col ++)
+     
+    for(unsigned int col = roi.getTopLeftX(); col < roi.getBottomRightX();col++)
     {
-        for(unsigned int row = 0; row < roi._height; row++)
+        for(unsigned int row = roi.getTopLeftY(); row < roi.getBottomRightY();row++)
         {
-            hue = hsv[roi._width * row + col];
-            (*frame).at<Vec3b>( row + roi.getTopLeftY(), col + roi.getTopLeftX() )[0] = (int) (255 * histogram[hue / BUCKET_WIDTH]);
-            (*frame).at<Vec3b>( row + roi.getTopLeftY(), col + roi.getTopLeftX() )[1] = (int) (255 * histogram[hue / BUCKET_WIDTH]);
-            (*frame).at<Vec3b>( row + roi.getTopLeftY(), col + roi.getTopLeftX() )[2] = (int) (255 * histogram[hue / BUCKET_WIDTH]);
+            int hue = hsv[step * row + col];
+        
+            (*frame).at<Vec3b>( row, col)[0] = (int) (255.0 * ( histogram[hue / BUCKET_WIDTH]));
+            (*frame).at<Vec3b>( row, col)[1] = (int) (255.0 * ( histogram[hue / BUCKET_WIDTH]));
+            (*frame).at<Vec3b>( row, col)[2] = (int) (255.0 * ( histogram[hue / BUCKET_WIDTH]));
         }
     }
 }
@@ -141,8 +143,44 @@ float SerialCamShift::cpuMeanShift(unsigned char * hueArray, unsigned int step, 
 }
 
 
+/*
+ 
+ Second moments are
+ M =∑∑x2I(x,y); M =∑∑x2I(x,y). 20 20
+ xy xy
+ Then the object orientation (major axis) is
+  
+ M  2 11 −xcyc 
+ M00  
+ arctan 
+ M20 2 M02 M −xc −M
+ 2  −yc    
+  θ=
+  00
+   00
+ 2
+ 
+ 
+ 
+ 
+ 
+ */
 
-float SerialCamShift::cpuCamShift(unsigned char * hueArray, unsigned int step, RegionOfInterest roi, unsigned int obj_index, float * histogram, bool shouldPrint, unsigned int * cpu_cx, unsigned int * cpu_cy, unsigned int * width, unsigned int * height, unsigned int hueLength)
+
+
+float SerialCamShift::cpuCamShift(
+unsigned char * hueArray,
+unsigned int step,
+RegionOfInterest roi,
+unsigned int obj_index,
+float * histogram,
+bool shouldPrint,
+unsigned int * cpu_cx,
+unsigned int * cpu_cy,
+unsigned int * width,
+unsigned int * height,
+unsigned int hueLength,
+float * angle) //frame total
 {
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
@@ -175,8 +213,10 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, unsigned int step, R
                     hue = hueArray[step * row + col];
                     probability = histogram[(hue / BUCKET_WIDTH) + obj_offset];
                     M00 += probability;
-                    M1x += ((float)col) * probability;
+                    M1x += ((float)col ) * probability;
                     M1y += ((float)row) * probability;
+                    M2x += ((float)col * col ) * probability;
+                    M2y += ((float)row * row ) * probability;
                 }
                 else{
                     printf("Problem: %d %d\n", roi.getBottomRightX(), roi.getBottomRightY());
@@ -213,6 +253,21 @@ float SerialCamShift::cpuCamShift(unsigned char * hueArray, unsigned int step, R
         }
         
     }//end of converging
+    
+  /*  float numerator = 2 * (( (M1x * M1y) / M00) - (cx * cy));
+    float denomator = ((M2y / M00) - (cy * cy)) - ((M2x / M00) - (cx * cx)) ;
+    
+   *angle = atan(numerator / denomator) / 2.0;
+    
+    *angle = *angle * 180 / PI;
+    
+    
+    printf("Angle: %f\n", *angle);*/
+    
+    
+    
+    
+    
     if(shouldPrint)
         printf("************* CPU FINISHED A FRAME FOR OBJECT %d ***********\n", obj_index);
     time2 = high_resolution_clock::now();

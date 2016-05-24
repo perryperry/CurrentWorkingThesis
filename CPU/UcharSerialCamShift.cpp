@@ -179,8 +179,9 @@ unsigned int * cpu_cx,
 unsigned int * cpu_cy,
 unsigned int * width,
 unsigned int * height,
-unsigned int hueLength,
-float * angle) //frame total
+unsigned int hueLength, //frame total
+float * angle,
+bool adjustWindow)
 {
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
@@ -231,14 +232,16 @@ float * angle) //frame total
             cpu_cy[0] = cy;
             roi.setCentroid(Point( cpu_cx[0], cpu_cy[0] ));
      
-            *width = ceil(2 * sqrt(M00));
             
-           if(*width < 20)
-                *width = 200;
+            if(adjustWindow){
+                *width = ceil(2 * sqrt(M00));
             
-           *height = ceil(*width * 1.1);
-            roi.setWidthHeight(*width, *height);
-
+                if(*width < 20)
+                    *width = 200;
+            
+                *height = ceil(*width * 1.1);
+                roi.setWidthHeight(*width, *height);
+            }
         }
         else
         {

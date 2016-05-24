@@ -6,17 +6,20 @@
 //  Copyright © 2016 Matthew Perry. All rights reserved.
 //
 
-#include <iostream>
+
+#include "opencv2/video/background_segm.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/videoio/videoio.hpp"
 #include "opencv2/core/core.hpp"
+
 #include "GPU/gpuMain.h"
 #include "CPU/RegionOfInterest.hpp"
 #include "CPU/UcharSerialCamShift.hpp"
+
 #include <chrono>
 #include <pthread.h>
-
+#include <iostream>
 
 
 //print colors
@@ -126,6 +129,27 @@ void test(const unsigned &r, const unsigned &g, const unsigned &b, const unsigne
     printf("\n");
 }
 
+Mat removeBackGround(Mat frame, Ptr<BackgroundSubtractor> mog2)
+{
+    Mat fgMaskMOG2; //fore ground mask
+    Mat foregroundImg;
+    //update the background model
+    mog2->apply(frame, fgMaskMOG2, 0);
+    //convert mask from Grayscale to BGR
+    cvtColor(fgMaskMOG2,fgMaskMOG2, COLOR_GRAY2BGR);
+    // Blackout foreground
+    foregroundImg = Scalar::all(0);
+    
+    frame.copyTo(foregroundImg, fgMaskMOG2);
+    return foregroundImg;
+}
+
+
+
+
+
+
+
 
 void parameterCheck(unsigned int argCount)
 {
@@ -184,7 +208,7 @@ void * test(void * data)
     printf("%s\n", str);
 }
 
-void menu(unsigned int * num_objects, bool * deviceProp, bool * cpu, bool * gpu, bool * print, bool * windowAdjust)
+void menu(unsigned int * num_objects, bool * deviceProp, bool * cpu, bool * gpu, bool * bgRemove, bool * windowAdjust)
 {
     unsigned int answer = 0;
     cout << YELLOW "\n##############################################################\n";
@@ -205,12 +229,12 @@ void menu(unsigned int * num_objects, bool * deviceProp, bool * cpu, bool * gpu,
     cout << CYNA "Should run gpu version" << RED " (0/1):";
     scanf("%d", &answer);
     *gpu = answer;
-    cout << CYNA "Should print intermediate output" << RED " (0/1):";
-    scanf("%d", &answer);
-    *print = answer;
     cout << CYNA "Should adjust window size" << RED " (0/1):";
     scanf("%d", &answer);
     *windowAdjust = answer;
+    cout << CYNA "Should background remove" << RED " (0/1):";
+    scanf("%d", &answer);
+    *bgRemove = answer;
     cout << YELLOW "##############################################################\n\n" RESET;
 
     if(*num_objects == 0)
@@ -222,8 +246,11 @@ int main(int argc, const char * argv[])
     //timeMemoryTransfer();
     //exit(1);
     
+    Ptr<BackgroundSubtractor> mog2 = createBackgroundSubtractorMOG2().dynamicCast<BackgroundSubtractor>();
+    
     bool shouldAdjustWindowSize = false;
     bool shouldDisplayDeviceProperties = false;
+    bool shouldBackgroundRemove = false;
     bool shouldCPU = false;
     bool shouldGPU = false;
     bool shouldBackProjectFrame = true;
@@ -231,7 +258,7 @@ int main(int argc, const char * argv[])
     unsigned int num_objects = 1;
    
     parameterCheck(argc);
-    menu(&num_objects, &shouldDisplayDeviceProperties, &shouldCPU, &shouldGPU, &shouldPrint, &shouldAdjustWindowSize);
+    menu(&num_objects, &shouldDisplayDeviceProperties, &shouldCPU, &shouldGPU, &shouldBackgroundRemove, &shouldAdjustWindowSize);
     
     if( shouldDisplayDeviceProperties )
         printDeviceProperties();
@@ -290,6 +317,7 @@ int main(int argc, const char * argv[])
         SerialCamShift camShift;
         
         Mat frame, hsv;
+        Mat bg_removed_frame;
         
         /*************************************** Open Output VideoWriter *********************************************/
         //Code for opening VideoWriter taken from http://docs.opencv.org/3.1.0/d7/d9e/tutorial_video_write.html#gsc.tab=0
@@ -344,7 +372,6 @@ int main(int argc, const char * argv[])
         camShift.createHistogram(entireHueArray, step, cpu_objects, &histogram, num_objects);
         
         if(shouldGPU)
-        {
             mainConstantMemoryHistogramLoad(histogram, num_objects);
 
             //For the initial frame, just render the initial search windows' positions
@@ -359,28 +386,38 @@ int main(int argc, const char * argv[])
             }
             
       
-            
-            //gpu device struct for kernel memory re-use
-            unsigned int num_block = initDeviceStruct(num_objects,
-                                                     ds,
-                                                     obj_block_ends,
-                                                     entireHueArray,
-                                                     hueLength,
-                                                     gpu_cx,
-                                                     gpu_cy,
-                                                     gpu_col_offset,
-                                                     gpu_row_offset,
-                                                     subFrameLengths,
-                                                     sub_widths,
-                                                     sub_heights);
-        }
+            if(shouldGPU)
+                //gpu device struct for kernel memory re-use
+                unsigned int num_block = initDeviceStruct(num_objects,
+                                                         ds,
+                                                         obj_block_ends,
+                                                         entireHueArray,
+                                                         hueLength,
+                                                         gpu_cx,
+                                                         gpu_cy,
+                                                         gpu_col_offset,
+                                                         gpu_row_offset,
+                                                         subFrameLengths,
+                                                         sub_widths,
+                                                         sub_heights);
+        
+        
+        
         outputVideo.write(frame);
         
         int frame_count = 1;
         float cpu_angle = 0;
        while(cap.read(frame))
        {
-            hueLength = convertToHueArray(frame, &entireHueArray);
+           
+           if( shouldBackgroundRemove )
+           {
+               bg_removed_frame = removeBackGround(frame, mog2);
+               hueLength = convertToHueArray(bg_removed_frame, &entireHueArray);
+           }
+           else
+              hueLength = convertToHueArray(frame, &entireHueArray);
+           
             /******************************** CPU MeanShift until Convergence ***************************************/
             if(shouldCPU)
             {
@@ -389,28 +426,23 @@ int main(int argc, const char * argv[])
                     cpu_cx = cpu_objects[obj_cur].getCenterX();
                     cpu_cy = cpu_objects[obj_cur].getCenterY();
                    
-                    if( shouldAdjustWindowSize )
-                    {
-                       unsigned int width = 0, height = 0;
-                       cpu_time_cost += camShift.cpuCamShift(entireHueArray,
-                                                             step,
-                                                             cpu_objects[obj_cur],
-                                                             obj_cur,
-                                                             histogram,
-                                                             shouldPrint,
-                                                             &cpu_cx,
-                                                             &cpu_cy,
-                                                             &width,
-                                                             &height,
-                                                             hueLength,
-                                                             &cpu_angle);
+                   
+                    unsigned int width = 0, height = 0;
+                    cpu_time_cost += camShift.cpuCamShift(entireHueArray,
+                                                         step,
+                                                         cpu_objects[obj_cur],
+                                                         obj_cur,
+                                                         histogram,
+                                                         shouldPrint,
+                                                         &cpu_cx,
+                                                         &cpu_cy,
+                                                         &width,
+                                                         &height,
+                                                         hueLength,
+                                                         &cpu_angle,
+                                                         shouldAdjustWindowSize);
                         
-                       cpu_objects[obj_cur].setWidthHeight(width, height);
-                   }
-                   else
-                   {
-                       cpu_time_cost += camShift.cpuMeanShift(entireHueArray, step, cpu_objects[obj_cur], obj_cur, histogram, shouldPrint, &cpu_cx, &cpu_cy);
-                   }
+                   cpu_objects[obj_cur].setWidthHeight(width, height);
                    cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
                    cpu_objects[obj_cur].drawCPU_ROI(&frame, obj_cur, cpu_angle);
               }
@@ -432,9 +464,8 @@ int main(int argc, const char * argv[])
              
                 for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
                 {
-                    //printf("OUTSIDE OF KERNEL (%d) --> cx: %d cy: %d WIDTH: %d HEIGHT: %d\n", obj_cur, gpu_cx[obj_cur], gpu_cy[obj_cur], sub_widths[obj_cur], sub_heights[obj_cur]);
                     gpu_objects[obj_cur].setROI(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]), sub_widths[obj_cur], sub_heights[obj_cur]);
-                    gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur, 10);
+                    gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur, 0);
                 }
                 
             }
@@ -442,10 +473,8 @@ int main(int argc, const char * argv[])
             if(shouldBackProjectFrame){
                 if(shouldCPU)
                     camShift.backProjectHistogram(entireHueArray, step, &frame, cpu_objects[0], histogram);
-               /* if(shouldGPU)
-                    camShift.backProjectHistogram(hueArray, frame.step, &frame, gpu_objects[obj_cur], histogram);*/
            }
-           printf(BLUE "Frame #%d processed\n", frame_count++);
+            printf(BLUE "Frame #%d processed\n", frame_count++);
             outputVideo.write(frame);
                 
          }//end while

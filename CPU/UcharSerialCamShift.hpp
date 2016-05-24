@@ -34,7 +34,19 @@ public:
     
     float cpuMeanShift(unsigned char * hueArray, unsigned int step, RegionOfInterest cpu_objects, unsigned int obj_index, float * histogram, bool shouldPrint, unsigned int * cpu_cx, unsigned int * cpu_cy);
     
-    float cpuCamShift(unsigned char * hueArray, unsigned int step, RegionOfInterest cpu_objects, unsigned int obj_index, float * histogram, bool shouldPrint, unsigned int * cpu_cx, unsigned int * cpu_cy, unsigned int * width, unsigned int * height, unsigned int hueLength, float * angle);
+    float cpuCamShift(unsigned char * hueArray,
+                      unsigned int step,
+                      RegionOfInterest cpu_objects,
+                      unsigned int obj_index,
+                      float * histogram,
+                      bool shouldPrint,
+                      unsigned int * cpu_cx,
+                      unsigned int * cpu_cy,
+                      unsigned int * width,
+                      unsigned int * height,
+                      unsigned int hueLength,
+                      float * angle,
+                      bool adjustWindow);
 };
 
 unsigned int distance(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2);

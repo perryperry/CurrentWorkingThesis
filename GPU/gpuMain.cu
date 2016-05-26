@@ -2,76 +2,33 @@
 #include "dynamicCamShift.h"
 #include "deviceProperties.h"
 
-void testBGRtoHue(unsigned char * bgr, unsigned char * originalHue, int total)
+float launchGPU_BGR_to_Hue(unsigned char * bgr, d_struct ds, int total)
 {
   cudaError_t err; 
   unsigned int num_block = 0;
 
-  unsigned char * testarray = (unsigned char * )malloc(sizeof(unsigned char) * total);
-unsigned char * hueArray;
-cudaMalloc((void **)&hueArray, sizeof(unsigned char) * total );
-  unsigned char * d_bgr;
-  cudaMalloc((void **)&d_bgr, sizeof(unsigned char) * total * 3);
+  num_block += ceil( (float) total / (float) 1024);
+  dim3 block(1024, 1, 1);
+  dim3 grid(num_block, 1, 1);
 
- 
+  cudaEvent_t launch_begin, launch_end;
 
+  float time = 0;
+  cudaEventCreate(&launch_begin);
+  cudaEventCreate(&launch_end);
+  cudaEventRecord(launch_begin,0);
 
-cudaMalloc((void **)&hueArray, sizeof(unsigned char) * total);
+  if(( err =  cudaMemcpy(ds.d_bgr, bgr, sizeof(unsigned char) * total * 3, cudaMemcpyHostToDevice)) != cudaSuccess)
+      printf("Is this the error? %s\n", cudaGetErrorString(err));
 
-    num_block += ceil( (float) total / (float) 1024);
-    dim3 block(1024, 1, 1);
-    dim3 grid(num_block, 1, 1);
-
-
-
-     cudaEvent_t launch_begin, launch_end;
-
-    float time = 0;
-    cudaEventCreate(&launch_begin);
-    cudaEventCreate(&launch_end);
-    cudaEventRecord(launch_begin,0);
-
-
-
-
-
-     if(( err =  cudaMemcpy(d_bgr, bgr, sizeof(unsigned char) * total * 3, cudaMemcpyHostToDevice)) != cudaSuccess)
-      printf("%s\n", cudaGetErrorString(err));
-
-    gpuBGRtoHue<<< grid, block >>>(d_bgr, hueArray, total);
-
-
-
+  gpuBGRtoHue<<< grid, block >>>(ds.d_bgr, ds.d_frame, total);
 
   cudaEventRecord(launch_end,0);
-    cudaEventSynchronize(launch_end);
-    cudaEventElapsedTime(&time, launch_begin, launch_end);
+  cudaEventSynchronize(launch_end);
+  cudaEventElapsedTime(&time, launch_begin, launch_end);
 
-
-printf("GPU bgr to hue: %f\n", time);
-
-
-    if(( err =  cudaMemcpy(testarray, hueArray, sizeof(unsigned char) * total, cudaMemcpyDeviceToHost)) != cudaSuccess)
-        printf("%s\n", cudaGetErrorString(err));
-
-
-      int i = 0;
-
-      for(i = 0; i < total; i ++)
-      {
-         // printf("%d) New: %d Original: %d\n", i, testarray[i], originalHue[i]);
-      }
-
-    free(testarray);
-    cudaFree(d_bgr);
-    cudaFree(hueArray);
+  return time;
 }
-
-
-
-
-
-
 
 //This function was taken from http://cuda-programming.blogspot.com/2013/01/how-to-query-to-devices-in-cuda-cc.html
 void printDeviceProperties()
@@ -156,6 +113,8 @@ unsigned int * sub_heights)
     unsigned int * d_sub_heights;
     unsigned int * d_sub_lengths;
     unsigned char * d_frame;
+    unsigned char * d_bgr;
+
     unsigned int num_block = 0;
     unsigned int obj_cur = 0;
     unsigned int tile_width = 1024;
@@ -164,10 +123,13 @@ unsigned int * sub_heights)
     {
        num_block += ceil( (float) sub_lengths[obj_cur] / (float) tile_width);
        block_ends[obj_cur] = num_block;
-       printf("SUB LENGTHS: %d sub_widths: %d sub_heights: %d Combined: %d\n", sub_lengths[obj_cur], sub_widths[obj_cur], sub_heights[obj_cur], sub_widths[obj_cur] * sub_heights[obj_cur]);
-       printf("CX: %d CY: %d\n", cx[obj_cur], cy[obj_cur]);
+       //printf("SUB LENGTHS: %d sub_widths: %d sub_heights: %d Combined: %d\n", sub_lengths[obj_cur], sub_widths[obj_cur], sub_heights[obj_cur], sub_widths[obj_cur] * sub_heights[obj_cur]);
+      // printf("CX: %d CY: %d\n", cx[obj_cur], cy[obj_cur]);
     }
     if(( err = cudaMalloc((void **)&d_frame, frameLength * sizeof(unsigned char))) != cudaSuccess)
+          printf("%s\n", cudaGetErrorString(err));
+
+    if(( err = cudaMalloc((void **)&d_bgr, sizeof(unsigned char) * frameLength * 3)) != cudaSuccess )
           printf("%s\n", cudaGetErrorString(err));
 
     if(( err = cudaMalloc((void **)&d_cx, sizeof(unsigned int) * num_objects)) != cudaSuccess) 
@@ -230,7 +192,7 @@ unsigned int * sub_heights)
     if(( err = cudaMemcpy(d_block_ends, block_ends, num_objects * sizeof(int), cudaMemcpyHostToDevice)) != cudaSuccess)
            printf("%s\n", cudaGetErrorString(err));
 
-
+    (*ds).d_bgr = d_bgr;
     (*ds).d_frame = d_frame;
     (*ds).d_cx = d_cx;
     (*ds).d_cy = d_cy;
@@ -248,6 +210,7 @@ unsigned int * sub_heights)
 
 void freeDeviceStruct(d_struct * ds)
 {
+    cudaFree((*ds).d_bgr);
     cudaFree((*ds).d_frame);
     cudaFree((*ds).d_cx);
     cudaFree((*ds).d_cy);
@@ -281,7 +244,7 @@ bool adapt_window)
     cudaEventCreate(&launch_end);
     cudaEventRecord(launch_begin,0);
     //Copy new frame into device memory
-    cudaMemcpy(ds.d_frame, frame, frame_length * sizeof(unsigned char), cudaMemcpyHostToDevice);
+    //cudaMemcpy(ds.d_frame, frame, frame_length * sizeof(unsigned char), cudaMemcpyHostToDevice);
     
     dynamicCamShiftMain<<< 1 , 1 >>>(num_objects,
                                     ds.d_frame,

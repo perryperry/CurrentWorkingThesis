@@ -17,6 +17,8 @@ __device__ unsigned int gpuDistance(unsigned int x1, unsigned int y1, unsigned i
     return (unsigned int) dist;
 }
 
+//https://gist.github.com/yoggy/8999625
+//http://docs.opencv.org/2.4/modules/imgproc/doc/miscellaneous_transformations.html
 __global__ void gpuBGRtoHue(unsigned char * bgr, unsigned char * hueArray, int total)
 {
 	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
@@ -35,14 +37,18 @@ __global__ void gpuBGRtoHue(unsigned char * bgr, unsigned char * hueArray, int t
     
    float max = fmaxf(r, fmaxf(g, b));
   float min = fminf(r, fminf(g, b));
-    
+    //v = max;
+
     if (max == 0.0f) {
         hue = 0;
+        //s = 0;
     }
     else if (max - min == 0.0f) {
         hue = 0;
+        //s = 0;
     }
     else { 
+       //s = (max - min) / max;
         if (max == r) {
             hue = 60 * ((g - b) / (max - min)) + 0;
         }

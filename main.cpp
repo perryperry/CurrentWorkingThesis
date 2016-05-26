@@ -40,96 +40,6 @@ using namespace std::chrono;
 #define MAXTHREADS 3
 
 #include <stdio.h>
-#include <math.h>
-
-#define min_f(a, b, c)  (fminf(a, fminf(b, c)))
-#define max_f(a, b, c)  (fmaxf(a, fmaxf(b, c)))
-//https://gist.github.com/yoggy/8999625
-//http://docs.opencv.org/2.4/modules/imgproc/doc/miscellaneous_transformations.html
-
-void rgb2hsv(const unsigned char &src_r, const unsigned char &src_g, const unsigned char &src_b, unsigned char &dst_h, unsigned char &dst_s, unsigned char &dst_v)
-{
-    float r = src_r / 255.0f;
-    float g = src_g / 255.0f;
-    float b = src_b / 255.0f;
-    
-    float h, s, v; // h:0-360.0, s:0.0-1.0, v:0.0-1.0
-    
-    float max = max_f(r, g, b);
-    float min = min_f(r, g, b);
-    
-    v = max;
-    
-    if (max == 0.0f) {
-        s = 0;
-        h = 0;
-    }
-    else if (max - min == 0.0f) {
-        s = 0;
-        h = 0;
-    }
-    else {
-        s = (max - min) / max;
-        
-        if (max == r) {
-            h = 60 * ((g - b) / (max - min)) + 0;
-        }
-        else if (max == g) {
-            h = 60 * ((b - r) / (max - min)) + 120;
-        }
-        else {
-            h = 60 * ((r - g) / (max - min)) + 240;
-        }
-    }
-    
-    if (h < 0) h += 360.0f;
-    
-    dst_h = (unsigned char)(h / 2);   // dst_h : 0-180
-    dst_s = (unsigned char)(s * 255); // dst_s : 0-255
-    dst_v = (unsigned char)(v * 255); // dst_v : 0-255
-}
-
-void hsv2rgb(const unsigned char &src_h, const unsigned char &src_s, const unsigned char &src_v, unsigned char &dst_r, unsigned char &dst_g, unsigned char &dst_b)
-{
-    float h = src_h *   2.0f; // 0-360
-    float s = src_s / 255.0f; // 0.0-1.0
-    float v = src_v / 255.0f; // 0.0-1.0
-    
-    float r, g, b; // 0.0-1.0
-    
-    int   hi = (int)(h / 60.0f) % 6;
-    float f  = (h / 60.0f) - hi;
-    float p  = v * (1.0f - s);
-    float q  = v * (1.0f - s * f);
-    float t  = v * (1.0f - s * (1.0f - f));
-    
-    switch(hi) {
-        case 0: r = v, g = t, b = p; break;
-        case 1: r = q, g = v, b = p; break;
-        case 2: r = p, g = v, b = t; break;
-        case 3: r = p, g = q, b = v; break;
-        case 4: r = t, g = p, b = v; break;
-        case 5: r = v, g = p, b = q; break;
-    }
-    
-    dst_r = (unsigned char)(r * 255); // dst_r : 0-255
-    dst_g = (unsigned char)(g * 255); // dst_r : 0-255
-    dst_b = (unsigned char)(b * 255); // dst_r : 0-255
-}
-
-
-void test(const unsigned &r, const unsigned &g, const unsigned &b, const unsigned &hue)
-{
-    unsigned char rv_h, rv_s, rv_v;
-   // unsigned char rv_r, rv_g, rv_b;
-    
-    rgb2hsv(r, g, b, rv_h, rv_s, rv_v);
-   // hsv2rgb(rv_h, rv_s, rv_v, rv_r, rv_g, rv_b);
-    
-    printf("rgb(%d, %d, %d) -> hsv(%d, %d, %d) -> hue(%d) ", r, g, b, rv_h, rv_s, rv_v, hue);
-    
-    printf("\n");
-}
 
 Mat removeBackGround(Mat frame, Ptr<BackgroundSubtractor> mog2)
 {
@@ -278,7 +188,8 @@ int main(int argc, const char * argv[])
         float gpu_time_cost = 0.0f;
         float cpu_time_cost = 0.0f;
         float cpu_bgr_to_hue_time = 0.0f;
-   
+        float gpu_bgr_to_hue_time = 0.0f;
+        
         unsigned int * gpu_cx = (unsigned int *) malloc(sizeof(int) * num_objects); //centroid x for gpu
         unsigned int * gpu_cy = (unsigned int *) malloc(sizeof(int) * num_objects); //centroid y for gpu
         
@@ -333,44 +244,16 @@ int main(int argc, const char * argv[])
 
         /************************************* First Frame initialize and process ****************************************/
         cap.read(frame);
-
+  
         float * histogram = (float *) calloc(sizeof(float), BUCKETS * num_objects);
         unsigned int hueLength = frame.total();
         unsigned char * entireHueArray = (unsigned char *) malloc(sizeof(unsigned char) * hueLength);
         cpuConvertBGR_To_Hue(frame, &entireHueArray, &step);
 
-         /*************************************** Testing OpenSource Hue Conversion against the OpenCV value for Hue *********************************************/
-       
- 
-       // uchar * d = frame.data;
-        
-      //  unsigned char * bgr = (unsigned char *) malloc(sizeof(unsigned char ) * frame.total() * 3);
-        
-       // memcpy(bgr, frame.data, sizeof(unsigned char ) * frame.total() * 3);
-       // testBGRtoHue(bgr, entireHueArray, hueLength);
-        
-        // for(int i = 0; i < frame.total() * 3; i+=3 )
-            // printf("%d vs %d\n", bgr[i], d[i]);
-        
-        
-        
-        
-       // free(bgr);
-        
-       /* int counter = 0;
-        for(int i = 0; i < frame.total() * 3; i+=3 )
-        {
-            int h = ( i + 1 ) / 3;
-            
-            test(d[i + 2],d[i + 1], d[i], entireHueArray[h] );
-            counter ++;
-           
-        }*/
-       // printf("Counter: %d\n", counter);
-      //  printf("%d \n", d[0]);// << endl;
-       // test(d[2], d[1], d[0], entireHueArray[0]);
-       // printf("%d\n", entireHueArray[0]);//<< endl;
-        
+    
+        //holds the bgr data from the entire frame, for gpu conversion to hue
+       unsigned char * bgr = (unsigned char *) malloc(sizeof(unsigned char ) * frame.total() * 3);
+    
         camShift.createHistogram(entireHueArray, step, cpu_objects, &histogram, num_objects);
         
         if(shouldGPU)
@@ -388,8 +271,7 @@ int main(int argc, const char * argv[])
             }
             
       
-            if(shouldGPU)
-                //gpu device struct for kernel memory re-use
+            if(shouldGPU)//gpu device struct for kernel memory re-use
                 unsigned int num_block = initDeviceStruct(num_objects,
                                                          ds,
                                                          obj_block_ends,
@@ -407,6 +289,7 @@ int main(int argc, const char * argv[])
         
         int frame_count = 1;
         float cpu_angle = 0;
+     
        while(cap.read(frame))
        {
            
@@ -450,6 +333,8 @@ int main(int argc, const char * argv[])
             /******************************** GPU MeanShift until Convergence **********************************************/
             if(shouldGPU)
             {
+                memcpy(bgr, frame.data, sizeof(unsigned char ) * frame.total() * 3);
+                gpu_bgr_to_hue_time += launchGPU_BGR_to_Hue(bgr, *ds, hueLength);
                 gpu_time_cost += gpuCamShift(
                                             *ds,
                                             num_objects,
@@ -471,30 +356,40 @@ int main(int argc, const char * argv[])
             }
             /******************************** Write to Output Video *******************************************/
             if(shouldBackProjectFrame){
-                if(shouldCPU)
-                    camShift.backProjectHistogram(entireHueArray, step, &frame, cpu_objects[0], histogram);
+               // if(shouldCPU)
+                    //camShift.backProjectHistogram(entireHueArray, step, &frame, cpu_objects[0], histogram);
            }
             printf(BLUE "Frame #%d processed\n", frame_count++);
             outputVideo.write(frame);
                 
-         }//end while
+         }//end while processing video frames
+        
+        //Average time costs structures
         float gpu_average_time_cost = gpu_time_cost / ((float) totalFrames);
         float cpu_average_time_cost = cpu_time_cost / ((float) totalFrames);
         float cpu_average_bgr_hue_time =  cpu_bgr_to_hue_time / ((float) totalFrames);
+        float gpu_average_bgr_hue_time =  gpu_bgr_to_hue_time / ((float) totalFrames);
         
-        if(shouldCPU)
-        {
-            printf(RED "CPU average bgr to hue conversion time cost in milliseconds: ");
-            printf(YELLOW "%f\n", cpu_average_bgr_hue_time);
-            printf(RED "CPU average CAMSHIFT computation time cost in milliseconds: ");
-            printf(YELLOW "%f\n", cpu_average_time_cost);
-        }
-        if(shouldGPU)
-        {
-            printf(RED "GPU average CAMSHIFT computation time cost in milliseconds: "); printf(YELLOW "%f\n", gpu_average_time_cost);
-            printf(RED "CAMSHIFT computation Speed-up: ");
-            printf( YELLOW "%f\n", cpu_average_time_cost/ gpu_average_time_cost);
-        }
+        printf(YELLOW "\n************************  RESULTS  ************************\n");
+        
+        printf(GREEN    "CPU average bgr to hue conversion time cost in milliseconds: ");
+        printf(YELLOW "%f\n", cpu_average_bgr_hue_time);
+        printf(GREEN "GPU average bgr to hue conversion time cost in milliseconds: ");
+        printf(YELLOW "%f\n", gpu_average_bgr_hue_time);
+        printf(RED "BGR to Hue conversion Speed-up: ");
+        printf( YELLOW "%f\n\n", cpu_average_bgr_hue_time / gpu_average_bgr_hue_time);
+        
+        
+        printf(GREEN "CPU average CAMSHIFT computation time cost in milliseconds: ");
+        printf(YELLOW "%f\n", cpu_average_time_cost);
+        printf(GREEN "GPU average CAMSHIFT computation time cost in milliseconds: ");
+        printf(YELLOW "%f\n", gpu_average_time_cost);
+        printf(RED "CAMSHIFT computation Speed-up: ");
+        printf( YELLOW "%f\n\n", cpu_average_time_cost/ gpu_average_time_cost);
+            
+        printf(RED "Total Speed-up: ");
+        printf(YELLOW "%f\n", (cpu_average_time_cost + cpu_average_bgr_hue_time) / (gpu_average_time_cost + gpu_average_time_cost));
+    
         //clean-up
         outputVideo.release();
         free(histogram);
@@ -509,7 +404,7 @@ int main(int argc, const char * argv[])
         free(sub_widths);
         free(sub_heights);
         free(obj_block_ends);
-        
+        free(bgr);
     }//end should not display device properties
     
     printf(MAGETA "Program exited successfully\n" RESET);

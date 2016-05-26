@@ -20,10 +20,11 @@ struct device_struct
     unsigned int *  d_sub_lengths;
     unsigned int *  d_block_ends;
     unsigned char * d_frame;
+    unsigned char * d_bgr;
 }; typedef struct device_struct d_struct;
 
 
-void testBGRtoHue(unsigned char * bgr,unsigned char * originalHue, int total);
+float  launchGPU_BGR_to_Hue(unsigned char * bgr, d_struct ds, int total);
 
 void printDeviceProperties();
 

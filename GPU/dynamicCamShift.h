@@ -55,6 +55,10 @@ unsigned int tid);
 
 /********************************************************/
 
+__global__ void gpuBGRtoHue(unsigned char * bgr, unsigned char * hueArray, int total);
+
+/********************************************************/
+
 __global__ void dynamicCamShiftMain(
 unsigned int num_objects,
 unsigned char * frame,

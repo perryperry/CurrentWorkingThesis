@@ -32,8 +32,6 @@ public:
     
     void backProjectHistogram(unsigned char * hsv, unsigned int step, Mat * frame, RegionOfInterest roi, float * histogram);
     
-    float cpuMeanShift(unsigned char * hueArray, unsigned int step, RegionOfInterest cpu_objects, unsigned int obj_index, float * histogram, bool shouldPrint, unsigned int * cpu_cx, unsigned int * cpu_cy);
-    
     float cpuCamShift(unsigned char * hueArray,
                       unsigned int step,
                       RegionOfInterest cpu_objects,

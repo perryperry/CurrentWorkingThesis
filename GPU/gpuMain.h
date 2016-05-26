@@ -22,6 +22,9 @@ struct device_struct
     unsigned char * d_frame;
 }; typedef struct device_struct d_struct;
 
+
+void testBGRtoHue(unsigned char * bgr,unsigned char * originalHue, int total);
+
 void printDeviceProperties();
 
 void timeMemoryTransfer();

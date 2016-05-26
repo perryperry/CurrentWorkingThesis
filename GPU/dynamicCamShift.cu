@@ -17,6 +17,50 @@ __device__ unsigned int gpuDistance(unsigned int x1, unsigned int y1, unsigned i
     return (unsigned int) dist;
 }
 
+__global__ void gpuBGRtoHue(unsigned char * bgr, unsigned char * hueArray, int total)
+{
+	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
+
+	unsigned int bgrIndex = 3 * i;
+
+  if( i < total){
+
+	float b, g, r; 
+
+	b = (float) bgr[bgrIndex    ]  / 255.0f;
+	g = (float) bgr[bgrIndex + 1] / 255.0f;
+	r = (float) bgr[bgrIndex + 2] / 255.0f;
+
+  float hue; // h:0-360.0, s:0.0-1.0, v:0.0-1.0
+    
+   float max = fmaxf(r, fmaxf(g, b));
+  float min = fminf(r, fminf(g, b));
+    
+    if (max == 0.0f) {
+        hue = 0;
+    }
+    else if (max - min == 0.0f) {
+        hue = 0;
+    }
+    else { 
+        if (max == r) {
+            hue = 60 * ((g - b) / (max - min)) + 0;
+        }
+        else if (max == g) {
+            hue = 60 * ((b - r) / (max - min)) + 120;
+        }
+        else {
+            hue = 60 * ((r - g) / (max - min)) + 240;
+        }
+    }
+    
+    if (hue < 0) hue += 360.0f;
+    
+   hueArray[i] = (unsigned char)(hue / 2);   // Hue --> 0-180
+
+ }
+}
+
 /********************************************************/
 
 __device__ bool converged(unsigned int num_objects)

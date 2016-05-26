@@ -45,6 +45,8 @@ using namespace std::chrono;
 #define min_f(a, b, c)  (fminf(a, fminf(b, c)))
 #define max_f(a, b, c)  (fmaxf(a, fmaxf(b, c)))
 //https://gist.github.com/yoggy/8999625
+//http://docs.opencv.org/2.4/modules/imgproc/doc/miscellaneous_transformations.html
+
 void rgb2hsv(const unsigned char &src_r, const unsigned char &src_g, const unsigned char &src_b, unsigned char &dst_h, unsigned char &dst_s, unsigned char &dst_v)
 {
     float r = src_r / 255.0f;
@@ -145,12 +147,6 @@ Mat removeBackGround(Mat frame, Ptr<BackgroundSubtractor> mog2)
 }
 
 
-
-
-
-
-
-
 void parameterCheck(unsigned int argCount)
 {
     if(argCount != 3)
@@ -160,33 +156,25 @@ void parameterCheck(unsigned int argCount)
     }
 }
 
-unsigned int calculateHueArrayLength(Mat frame, unsigned int * step, unsigned int * mat_rows, unsigned int * mat_cols)
+float cpuConvertBGR_To_Hue(Mat frame, unsigned char ** hueArray, unsigned int * step)
 {
-    Mat hsvMat;
-    cvtColor(frame, hsvMat, CV_RGB2HSV);
-    std::vector<cv::Mat> hsv_channels;
-    split(hsvMat, hsv_channels);
-    Mat hueMatrix = hsv_channels[0];
-    unsigned int total = hueMatrix.total();
-    *step = hueMatrix.step;
-    *mat_rows = hueMatrix.rows;
-    *mat_cols = hueMatrix.cols;
-    return total;
-}
-
-unsigned int convertToHueArray(Mat frame, unsigned char ** hueArray)
-{
+    high_resolution_clock::time_point time1;
+    high_resolution_clock::time_point time2;
+    
+    time1 = high_resolution_clock::now();
+    
     Mat hsvMat;
     cvtColor(frame, hsvMat, CV_BGR2HSV);
     std::vector<cv::Mat> hsv_channels;
     split(hsvMat, hsv_channels);
     Mat hueMatrix = hsv_channels[0];
-    unsigned int i = 0;
-    for(i = 0; i < hueMatrix.total(); i ++)
-    {
-        (*hueArray)[i]=(unsigned char) hueMatrix.data[i];
-    }
-    return hueMatrix.total();
+    *step = hueMatrix.step;
+    memcpy(*hueArray, hueMatrix.data, sizeof(unsigned char) * hueMatrix.total());
+    
+    time2 = high_resolution_clock::now();
+    auto cpu_duration = duration_cast<duration<double>>( time2 - time1 ).count();
+    
+    return (float)(cpu_duration * 1000.0);
 }
 
 void printHueSum(unsigned char * entireHueArray, unsigned int hueLength)
@@ -264,7 +252,6 @@ int main(int argc, const char * argv[])
         printDeviceProperties();
     else //Process Video
     {
-    
         VideoCapture cap(argv[1]);
         unsigned int x, y, x2, y2, obj_cur = 0;
         
@@ -290,10 +277,8 @@ int main(int argc, const char * argv[])
         
         float gpu_time_cost = 0.0f;
         float cpu_time_cost = 0.0f;
-        
-        high_resolution_clock::time_point time1;
-        high_resolution_clock::time_point time2;
-        
+        float cpu_bgr_to_hue_time = 0.0f;
+   
         unsigned int * gpu_cx = (unsigned int *) malloc(sizeof(int) * num_objects); //centroid x for gpu
         unsigned int * gpu_cy = (unsigned int *) malloc(sizeof(int) * num_objects); //centroid y for gpu
         
@@ -350,25 +335,42 @@ int main(int argc, const char * argv[])
         cap.read(frame);
 
         float * histogram = (float *) calloc(sizeof(float), BUCKETS * num_objects);
-        unsigned int hueLength = calculateHueArrayLength(frame, &step, &mat_rows, &mat_cols);
-        printf("After hue, total: %d\n", hueLength);
-        printf("Mat: rows: %d cols: %d\n", mat_rows, mat_cols);
+        unsigned int hueLength = frame.total();
         unsigned char * entireHueArray = (unsigned char *) malloc(sizeof(unsigned char) * hueLength);
-        convertToHueArray(frame, &entireHueArray);
+        cpuConvertBGR_To_Hue(frame, &entireHueArray, &step);
 
          /*************************************** Testing OpenSource Hue Conversion against the OpenCV value for Hue *********************************************/
-        //https://gist.github.com/yoggy/8999625
-        //http://docs.opencv.org/2.4/modules/imgproc/doc/miscellaneous_transformations.html
-        /*   std::vector<cv::Mat> three_channels;
-        cv::split(frame, three_channels);
-        for(int i=0; i< frame.rows; i++)
-            for(int j=0; j<frame.cols; j++)
-                //printf("(%d %d %d) --> %d \n",three_channels[0].at<uchar>(i,j),three_channels[1].at<uchar>(i,j), three_channels[2].at<uchar>(i,j), entireHueArray[step * i + j]);
-                test(three_channels[2].at<uchar>(i,j), three_channels[1].at<uchar>(i,j), three_channels[0].at<uchar>(i,j), entireHueArray[step * i + j]);
+       
+ 
+       // uchar * d = frame.data;
+        
+      //  unsigned char * bgr = (unsigned char *) malloc(sizeof(unsigned char ) * frame.total() * 3);
+        
+       // memcpy(bgr, frame.data, sizeof(unsigned char ) * frame.total() * 3);
+       // testBGRtoHue(bgr, entireHueArray, hueLength);
+        
+        // for(int i = 0; i < frame.total() * 3; i+=3 )
+            // printf("%d vs %d\n", bgr[i], d[i]);
         
         
-        */
-
+        
+        
+       // free(bgr);
+        
+       /* int counter = 0;
+        for(int i = 0; i < frame.total() * 3; i+=3 )
+        {
+            int h = ( i + 1 ) / 3;
+            
+            test(d[i + 2],d[i + 1], d[i], entireHueArray[h] );
+            counter ++;
+           
+        }*/
+       // printf("Counter: %d\n", counter);
+      //  printf("%d \n", d[0]);// << endl;
+       // test(d[2], d[1], d[0], entireHueArray[0]);
+       // printf("%d\n", entireHueArray[0]);//<< endl;
+        
         camShift.createHistogram(entireHueArray, step, cpu_objects, &histogram, num_objects);
         
         if(shouldGPU)
@@ -401,8 +403,6 @@ int main(int argc, const char * argv[])
                                                          sub_widths,
                                                          sub_heights);
         
-        
-        
         outputVideo.write(frame);
         
         int frame_count = 1;
@@ -413,10 +413,10 @@ int main(int argc, const char * argv[])
            if( shouldBackgroundRemove )
            {
                bg_removed_frame = removeBackGround(frame, mog2);
-               hueLength = convertToHueArray(bg_removed_frame, &entireHueArray);
+               cpu_bgr_to_hue_time += cpuConvertBGR_To_Hue(bg_removed_frame, &entireHueArray, &step);
            }
            else
-              hueLength = convertToHueArray(frame, &entireHueArray);
+               cpu_bgr_to_hue_time += cpuConvertBGR_To_Hue(frame, &entireHueArray, &step);
            
             /******************************** CPU MeanShift until Convergence ***************************************/
             if(shouldCPU)
@@ -427,7 +427,7 @@ int main(int argc, const char * argv[])
                     cpu_cy = cpu_objects[obj_cur].getCenterY();
                    
                    
-                    unsigned int width = 0, height = 0;
+                    unsigned int width = cpu_objects[obj_cur]._width, height = cpu_objects[obj_cur]._height;
                     cpu_time_cost += camShift.cpuCamShift(entireHueArray,
                                                          step,
                                                          cpu_objects[obj_cur],
@@ -480,15 +480,19 @@ int main(int argc, const char * argv[])
          }//end while
         float gpu_average_time_cost = gpu_time_cost / ((float) totalFrames);
         float cpu_average_time_cost = cpu_time_cost / ((float) totalFrames);
+        float cpu_average_bgr_hue_time =  cpu_bgr_to_hue_time / ((float) totalFrames);
+        
         if(shouldCPU)
         {
-            printf(RED "CPU average time cost in milliseconds: ");
+            printf(RED "CPU average bgr to hue conversion time cost in milliseconds: ");
+            printf(YELLOW "%f\n", cpu_average_bgr_hue_time);
+            printf(RED "CPU average CAMSHIFT computation time cost in milliseconds: ");
             printf(YELLOW "%f\n", cpu_average_time_cost);
         }
         if(shouldGPU)
         {
-            printf(RED "GPU average time cost in milliseconds: "); printf(YELLOW "%f\n", gpu_average_time_cost);
-            printf(RED "Speed-up: ");
+            printf(RED "GPU average CAMSHIFT computation time cost in milliseconds: "); printf(YELLOW "%f\n", gpu_average_time_cost);
+            printf(RED "CAMSHIFT computation Speed-up: ");
             printf( YELLOW "%f\n", cpu_average_time_cost/ gpu_average_time_cost);
         }
         //clean-up

@@ -2,6 +2,77 @@
 #include "dynamicCamShift.h"
 #include "deviceProperties.h"
 
+void testBGRtoHue(unsigned char * bgr, unsigned char * originalHue, int total)
+{
+  cudaError_t err; 
+  unsigned int num_block = 0;
+
+  unsigned char * testarray = (unsigned char * )malloc(sizeof(unsigned char) * total);
+unsigned char * hueArray;
+cudaMalloc((void **)&hueArray, sizeof(unsigned char) * total );
+  unsigned char * d_bgr;
+  cudaMalloc((void **)&d_bgr, sizeof(unsigned char) * total * 3);
+
+ 
+
+
+cudaMalloc((void **)&hueArray, sizeof(unsigned char) * total);
+
+    num_block += ceil( (float) total / (float) 1024);
+    dim3 block(1024, 1, 1);
+    dim3 grid(num_block, 1, 1);
+
+
+
+     cudaEvent_t launch_begin, launch_end;
+
+    float time = 0;
+    cudaEventCreate(&launch_begin);
+    cudaEventCreate(&launch_end);
+    cudaEventRecord(launch_begin,0);
+
+
+
+
+
+     if(( err =  cudaMemcpy(d_bgr, bgr, sizeof(unsigned char) * total * 3, cudaMemcpyHostToDevice)) != cudaSuccess)
+      printf("%s\n", cudaGetErrorString(err));
+
+    gpuBGRtoHue<<< grid, block >>>(d_bgr, hueArray, total);
+
+
+
+
+  cudaEventRecord(launch_end,0);
+    cudaEventSynchronize(launch_end);
+    cudaEventElapsedTime(&time, launch_begin, launch_end);
+
+
+printf("GPU bgr to hue: %f\n", time);
+
+
+    if(( err =  cudaMemcpy(testarray, hueArray, sizeof(unsigned char) * total, cudaMemcpyDeviceToHost)) != cudaSuccess)
+        printf("%s\n", cudaGetErrorString(err));
+
+
+      int i = 0;
+
+      for(i = 0; i < total; i ++)
+      {
+         // printf("%d) New: %d Original: %d\n", i, testarray[i], originalHue[i]);
+      }
+
+    free(testarray);
+    cudaFree(d_bgr);
+    cudaFree(hueArray);
+}
+
+
+
+
+
+
+
 //This function was taken from http://cuda-programming.blogspot.com/2013/01/how-to-query-to-devices-in-cuda-cc.html
 void printDeviceProperties()
 {

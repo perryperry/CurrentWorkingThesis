@@ -8,7 +8,7 @@
 #define MAX_OBJECTS 3
 #define TILE_WIDTH 1024
 //1024 * 1024 * 3 <--(max blocks, threads per block, 3 moments of camshift)
-#define MAX_OUTPUT 3145728
+#define MAX_OUTPUT TILE_WIDTH * 3 * MAX_OBJECTS
 #define SHARED_SIZE_LIMIT 1024
 #define HIST_BUCKETS 60
 #define FRAME_WIDTH 1080
@@ -51,7 +51,8 @@ __device__ void warpReduce(
 volatile float* shared_M00,
 volatile float* shared_M1x,
 volatile float* shared_M1y,
-unsigned int tid);
+unsigned int tid,
+unsigned int num_block);
 
 /********************************************************/
 
@@ -87,7 +88,8 @@ unsigned int * sub_widths,
 unsigned int * sub_totals,
 unsigned int * block_ends,
 unsigned int * row_offset,
-unsigned int * col_offset);
+unsigned int * col_offset,
+float * output);
 
 /********************************************************/
 
@@ -102,6 +104,7 @@ unsigned int * sub_totals,
 unsigned int * row_offset,
 unsigned int * col_offset,
 unsigned int * block_ends,
+float * output,
 int num_block,
 bool adjust_window);
 

@@ -97,7 +97,7 @@ bool adjustWindow)
 {
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
-    float M00 = 0.0, M1x = 0.0, M1y = 0.0, M2x = 0.0, M2y = 0.0, probability = 0.0, ratio = 0.0;
+    double M00 = 0.0, M1x = 0.0, M1y = 0.0, M2x = 0.0, M2y = 0.0, probability = 0.0, ratio = 0.0;
     unsigned int hue = 0, prevX = 0, prevY = 0, cx = 0, cy = 0, maxHue = 0;
   
     time1 = high_resolution_clock::now();
@@ -128,11 +128,11 @@ bool adjustWindow)
                     M00 += probability;
                     M1x += ((float)col ) * probability;
                     M1y += ((float)row) * probability;
-                    M2x += ((float)col * col ) * probability;
-                    M2y += ((float)row * row ) * probability;
+                    //M2x += ((float)col * col ) * probability;
+                   // M2y += ((float)row * row ) * probability;
                 }
                 else{
-                    printf("Problem: %d %d\n", roi.getBottomRightX(), roi.getBottomRightY());
+                    printf("Error in cpuCAMShift, out of bounds: %d %d\n", roi.getBottomRightX(), roi.getBottomRightY());
                 }
             }
         }

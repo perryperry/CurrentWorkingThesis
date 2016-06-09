@@ -333,8 +333,8 @@ int main(int argc, const char * argv[])
             /******************************** GPU MeanShift until Convergence **********************************************/
             if(shouldGPU)
             {
-                memcpy(bgr, frame.data, sizeof(unsigned char ) * frame.total() * 3);
-                gpu_bgr_to_hue_time += launchGPU_BGR_to_Hue(bgr, *ds, hueLength);
+               // memcpy(bgr, frame.data, sizeof(unsigned char ) * frame.total() * 3);
+               // gpu_bgr_to_hue_time += launchGPU_BGR_to_Hue(bgr, *ds, hueLength);
                 gpu_time_cost += gpuCamShift(
                                             *ds,
                                             num_objects,

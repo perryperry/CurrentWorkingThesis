@@ -1,5 +1,28 @@
 #include "dynamicCamShift.h"
 
+/*__device__ unsigned int setWindowToEntireFrame(unsigned int obj)
+{
+    g_row_offset[obj] = 0;
+    g_col_offset[obj] = 0;
+    g_width[obj]      = FRAME_WIDTH;
+    g_height[obj]     = FRAME_HEIGHT;
+    g_length[obj]     = FRAME_TOTAL;
+    return FRAME_TOTAL;
+}*/
+
+__device__ unsigned long upper_power_of_two(unsigned long v)
+{
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v++;
+    return v;
+}
+
+
 __host__ void setConstantMemoryHistogram(float * histogram)
 {
     cudaMemcpyToSymbol(const_histogram, histogram, sizeof(float) * HIST_BUCKETS * MAX_OBJECTS);
@@ -119,7 +142,7 @@ __device__ unsigned int getBlockStart(unsigned int * block_ends, unsigned int nu
 
 /********************************************************/
 
-__global__ void dynamicCamShiftMain(
+/*__global__ void dynamicCamShiftMain(
 unsigned int num_objects,
 unsigned char * frame,
 unsigned int frame_total,
@@ -204,7 +227,7 @@ bool adjust_window)
     {
        printf("Error: invalid number of blocks: %d > %d\n", num_block, TILE_WIDTH);
     }
-}
+}*/
 
 
 /********************************************************/
@@ -213,33 +236,34 @@ __device__ void warpReduce(
 volatile float* shared_M00, 
 volatile float* shared_M1x, 
 volatile float* shared_M1y, 
-unsigned int tid) 
+unsigned int tid,
+unsigned int blocksize) 
 { 
-  shared_M00[tid] += shared_M00[tid + 32];
-  shared_M00[tid] += shared_M00[tid + 16]; 
-  shared_M00[tid] += shared_M00[tid + 8]; 
-  shared_M00[tid] += shared_M00[tid + 4]; 
-  shared_M00[tid] += shared_M00[tid + 2]; 
-  shared_M00[tid] += shared_M00[tid + 1];
+    if (blocksize >= 64) shared_M00[tid] += shared_M00[tid + 32];
+    if (blocksize >= 32) shared_M00[tid] += shared_M00[tid + 16]; 
+    if (blocksize >= 16) shared_M00[tid] += shared_M00[tid + 8]; 
+    if (blocksize >= 8)  shared_M00[tid] += shared_M00[tid + 4]; 
+    if (blocksize >= 4)  shared_M00[tid] += shared_M00[tid + 2]; 
+    if (blocksize >= 2)  shared_M00[tid] += shared_M00[tid + 1];
 
-  shared_M1x[tid] += shared_M1x[tid + 32];
-  shared_M1x[tid] += shared_M1x[tid + 16]; 
-  shared_M1x[tid] += shared_M1x[tid + 8]; 
-  shared_M1x[tid] += shared_M1x[tid + 4]; 
-  shared_M1x[tid] += shared_M1x[tid + 2]; 
-  shared_M1x[tid] += shared_M1x[tid + 1];
+    if (blocksize >= 64) shared_M1x[tid] += shared_M1x[tid + 32];
+    if (blocksize >= 32) shared_M1x[tid] += shared_M1x[tid + 16]; 
+    if (blocksize >= 16) shared_M1x[tid] += shared_M1x[tid + 8]; 
+    if (blocksize >= 8)  shared_M1x[tid] += shared_M1x[tid + 4]; 
+    if (blocksize >= 4)  shared_M1x[tid] += shared_M1x[tid + 2]; 
+    if (blocksize >= 2)  shared_M1x[tid] += shared_M1x[tid + 1];
 
-  shared_M1y[tid] += shared_M1y[tid + 32];
-  shared_M1y[tid] += shared_M1y[tid + 16]; 
-  shared_M1y[tid] += shared_M1y[tid + 8]; 
-  shared_M1y[tid] += shared_M1y[tid + 4]; 
-  shared_M1y[tid] += shared_M1y[tid + 2]; 
-  shared_M1y[tid] += shared_M1y[tid + 1];
+    if (blocksize >= 64) shared_M1y[tid] += shared_M1y[tid + 32];
+    if (blocksize >= 32) shared_M1y[tid] += shared_M1y[tid + 16]; 
+    if (blocksize >= 16) shared_M1y[tid] += shared_M1y[tid + 8]; 
+    if (blocksize >= 8)  shared_M1y[tid] += shared_M1y[tid + 4]; 
+    if (blocksize >= 4)  shared_M1y[tid] += shared_M1y[tid + 2]; 
+    if (blocksize >= 2)  shared_M1y[tid] += shared_M1y[tid + 1];
 }
 
 /********************************************************/
 
-__global__ void blockReduce(
+/*__global__ void blockReduce(
 unsigned int num_objects,
 unsigned int num_block, 
 unsigned char * frame,  
@@ -320,11 +344,11 @@ unsigned int * col_offset)
     g_output[blockIdx.x + num_block] = shared_M1x[0]; 
     g_output[blockIdx.x + (2 * num_block)] = shared_M1y[0]; 
   }
-} 
+} */
 
 /********************************************************/
 
-__global__ void finalReduce(
+/*__global__ void finalReduce(
 unsigned int * cx, 
 unsigned int * cy,
 unsigned int * prevX,
@@ -412,7 +436,7 @@ bool adapt_window)
       col_offset[blockIdx.x] = (newColOffset > 0) ? newColOffset : 0;
       row_offset[blockIdx.x] = (newRowOffset > 0) ? newRowOffset : 0;
   }  
-}
+}*/
 
 /********************************************************/
 
@@ -448,3 +472,367 @@ int objectID)
 	sub_heights[objectID] = height;
 	sub_totals [objectID] = width * height;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**************** EXPERIMENTAL ********************/
+
+
+
+__global__ void dynamicCamShiftMain(
+unsigned int num_objects,
+unsigned char * frame,
+unsigned int frame_total,
+unsigned int frame_width,
+unsigned int * block_ends,
+unsigned int * cx,
+unsigned int * cy,
+unsigned int * prevX,
+unsigned int * prevY,
+unsigned int * row_offset,
+unsigned int * col_offset,
+unsigned int * sub_widths,
+unsigned int * sub_heights,
+unsigned int * sub_totals,
+bool adjust_window)                  
+{
+    unsigned int num_block = 0;
+    unsigned int obj_cur = 0; 
+   
+   // for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+   // {
+    float * output = g_output;
+       //printf("INSIDE OF KERNEL (%d) --> cx: %d cy: %d\n", obj_cur, cx[obj_cur], cy[obj_cur]);
+      prevX[obj_cur] = 0; 
+      prevY[obj_cur] = 0;
+      g_converged[obj_cur] = false;
+      //g_sub_totals[obj_cur] = sub_widths[obj_cur] * sub_heights[obj_cur];
+      num_block += ceil( (float) sub_totals[obj_cur] / (float) TILE_WIDTH);
+    //  block_ends[obj_cur] = num_block;
+   // }
+
+    dim3 block(TILE_WIDTH, 1, 1);
+    dim3 grid(num_block, 1, 1);
+
+    if(num_block <= TILE_WIDTH)
+    {
+     while( ! converged(num_objects) )
+      {
+          prevX[obj_cur] = cx[obj_cur]; 
+          prevY[obj_cur] = cy[obj_cur];
+
+
+          blockReduce<<<grid, block>>>(
+          num_objects, 
+          num_block,
+          frame, 
+          frame_width, 
+          sub_widths,
+          sub_totals,
+          block_ends, 
+          row_offset,
+          col_offset,
+          output);
+
+
+        unsigned int num_block_roundedup = upper_power_of_two(num_block);
+        // printf("Rounded %d to %d\n", num_block, num_block_roundedup);
+       //  sub_totals[obj_cur] = num_block;
+          cudaDeviceSynchronize();
+         
+       //  finalReduce<<< 1, num_block_roundedup, num_block_roundedup * 3 * sizeof(float) >>>( 
+     /*    finalReduce<<< 1, num_block_roundedup>>>( 
+          cx, 
+          cy,
+          prevX,
+          prevY, 
+          sub_widths, 
+          sub_heights,
+          sub_totals,
+          row_offset,
+          col_offset,
+          block_ends,
+          output,
+          num_block,
+          adjust_window);
+
+          cudaDeviceSynchronize();
+
+
+          float M00 = 0.0f, M1x = 0.0f, M1y = 0.0f;
+
+          M00 = g_output[0];
+          M1x = g_output[1];
+          M1y = g_output[2];*/
+
+          unsigned int ind = 0;
+      float M00 = 0.0f, M1x = 0.0f, M1y = 0.0f;
+
+      for(ind = 0; ind < num_block; ind ++)
+      {
+          M00 += g_output[ind];
+          M1x += g_output[ind + num_block];
+          M1y += g_output[ind + num_block + num_block];
+      }
+
+          cx[obj_cur] = (int) (M1x /  M00);
+          cy[obj_cur] = (int) (M1y / M00);
+
+          int newColOffset = cx[obj_cur] - (sub_widths[obj_cur] / 2);
+          int newRowOffset = cy[obj_cur] - (sub_heights[obj_cur] / 2);
+
+          col_offset[blockIdx.x] = (newColOffset > 0) ? newColOffset : 0;
+          row_offset[blockIdx.x] = (newRowOffset > 0) ? newRowOffset : 0;
+
+        if(gpuDistance(cx[obj_cur], cy[obj_cur], prevX[obj_cur], prevY[obj_cur]) <= 1 )
+          break;
+
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      }//end while
+
+    } //ennd if
+
+  } //end kernel
+
+    /* unsigned int ind = 0;
+      float M00 = 0.0f, M1x = 0.0f, M1y = 0.0f;
+
+      for(ind = 0; ind < num_block; ind ++)
+      {
+          M00 += g_output[ind];
+          M1x += g_output[ind + num_block];
+          M1y += g_output[ind + num_block + num_block];
+      }
+
+      cx[obj_cur] = (int) ((int) M1x / (int) M00);
+      cy[obj_cur] = (int) ((int) M1y / (int) M00);
+
+      int newColOffset = cx[obj_cur] - (sub_widths[obj_cur] / 2);
+      int newRowOffset = cy[obj_cur] - (sub_heights[obj_cur] / 2);
+
+      col_offset[blockIdx.x] = (newColOffset > 0) ? newColOffset : 0;
+      row_offset[blockIdx.x] = (newRowOffset > 0) ? newRowOffset : 0;
+
+        if(gpuDistance(cx[obj_cur], cy[obj_cur], prevX[obj_cur], prevY[obj_cur]) <= 1 )
+          break;
+
+       }
+
+
+       */
+
+
+
+
+
+
+
+
+
+
+         // 
+          
+   /*       if(adjust_window)
+          {
+            cudaDeviceSynchronize();
+            num_block = 0;
+            for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
+            {
+                num_block += ceil( (float) sub_totals[obj_cur] / (float)TILE_WIDTH);
+                block_ends[obj_cur] = num_block;
+            }
+            grid = dim3(num_block, 1, 1);
+         }
+        else
+        {
+          printf("Error: invalid number of blocks: %d > %d\n", num_block, TILE_WIDTH);
+        }*/
+
+
+
+
+/********************************************************/
+
+__global__ void blockReduce(
+unsigned int num_objects,
+unsigned int num_block, 
+unsigned char * frame,  
+unsigned int frame_width, 
+unsigned int * sub_widths,
+unsigned int * sub_totals,
+unsigned int * block_ends,
+unsigned int * row_offset,
+unsigned int * col_offset, 
+float * output)
+{
+  __shared__ float shared_M00[1024];
+  __shared__ float shared_M1x[1024];
+  __shared__ float shared_M1y[1024];
+  __shared__ unsigned int shared_hist_offset[1];
+  __shared__ unsigned int shared_obj_id[1];
+  __shared__ unsigned int shared_thread_offset[1];
+
+  unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
+  unsigned int tid = threadIdx.x;
+  unsigned int sub_col = 0;
+  unsigned int sub_row = 0;
+  unsigned int absolute_index = 0;
+
+  if(tid == 0)
+  {
+    shared_obj_id[0] = 0; //getObjID(block_ends, num_objects);
+    shared_hist_offset[0] = shared_obj_id[0] * HIST_BUCKETS;
+    //printf("Block dim x: %d\n", blockDim.x);
+   // if(shared_obj_id[0] != 0 )
+    //  shared_thread_offset[0] = block_ends[shared_obj_id[0] - 1] * 1024;
+   // else
+      shared_thread_offset[0] = 0;
+  }
+  __syncthreads();
+
+  //if(  g_converged[shared_obj_id[0]] )
+   // return;
+
+ // i -= shared_thread_offset[0];
+
+  if(i < sub_totals[shared_obj_id[0]]) 
+  {
+      sub_col = i % sub_widths[shared_obj_id[0]];
+      sub_row = i / sub_widths[shared_obj_id[0]];
+
+      absolute_index = (row_offset[ shared_obj_id[0] ] * frame_width) + col_offset[ shared_obj_id[0] ] + sub_col + (frame_width * sub_row);
+      
+      shared_M00[tid] = const_histogram[ (frame[absolute_index] / 3) + shared_hist_offset[0]];
+      shared_M1x[tid] = ((float)(sub_col + col_offset[shared_obj_id[0]])) * shared_M00[tid];
+      shared_M1y[tid] = ((float)(sub_row + row_offset[shared_obj_id[0]])) * shared_M00[tid];
+  }
+  else 
+  {
+      shared_M00[tid] = 0;
+      shared_M1x[tid] = 0;
+      shared_M1y[tid] = 0;
+  }
+  __syncthreads();
+
+  for (unsigned int stride = blockDim.x / 2; stride > 32; stride >>= 1) 
+  { 
+    if (tid < stride)
+    {
+      shared_M00[tid] += shared_M00[tid + stride]; 
+      shared_M1x[tid] += shared_M1x[tid + stride]; 
+      shared_M1y[tid] += shared_M1y[tid + stride]; 
+    }
+    __syncthreads(); 
+  }
+
+  if(tid < 32){
+     warpReduce(shared_M00, shared_M1x, shared_M1y, tid, blockDim.x);
+  }
+
+  // write result for this block to global mem
+  if (tid == 0) {
+    g_output[blockIdx.x] = shared_M00[0]; 
+    g_output[blockIdx.x + num_block] = shared_M1x[0]; 
+    g_output[blockIdx.x + num_block + num_block] = shared_M1y[0]; 
+  }
+} 
+
+/********************************************************/
+
+__global__ void finalReduce(
+unsigned int * cx, 
+unsigned int * cy,
+unsigned int * prevX,
+unsigned int * prevY,  
+unsigned int * sub_widths, 
+unsigned int * sub_heights,
+unsigned int * sub_totals,
+unsigned int * row_offset,
+unsigned int * col_offset,
+unsigned int * block_ends,
+float * output,
+int num_block,
+bool adapt_window)
+{
+  unsigned int tid = threadIdx.x; 
+
+  __shared__ float shared_M00[1024];
+  __shared__ float shared_M1x[1024];
+  __shared__ float shared_M1y[1024];
+
+    if(tid < num_block)
+    {
+      shared_M00[tid] = output[tid]; //M00
+      shared_M1x[tid] = output[tid + num_block]; //M1x
+      shared_M1y[tid] = output[tid + num_block + num_block];//M1y
+    }
+    else
+   {
+     shared_M00[tid] = 0.0; //M00
+     shared_M1x[tid] = 0.0; //M1x
+     shared_M1y[tid] = 0.0;//M1y
+   }
+    __syncthreads();
+
+    for (unsigned int stride = blockDim.x / 2; stride > 32; stride >>= 1) 
+    { 
+      if(tid < stride)
+      {
+        shared_M00[tid] += shared_M00[tid + stride]; 
+        shared_M1x[tid] += shared_M1x[tid + stride]; 
+        shared_M1y[tid] += shared_M1y[tid + stride]; 
+      }
+      __syncthreads(); 
+    }
+
+  if(tid < 32){
+     warpReduce(shared_M00, shared_M1x, shared_M1y, tid, blockDim.x);
+  }
+
+    if(tid == 0)
+    {
+       output[0] = shared_M00[tid]; 
+       output[1] = shared_M1x[tid]; 
+       output[2] = shared_M1y[tid]; 
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -246,7 +246,7 @@ bool adapt_window)
     //Copy new frame into device memory
     cudaMemcpy(ds.d_frame, frame, frame_length * sizeof(unsigned char), cudaMemcpyHostToDevice);
     
-    dynamicCamShiftMain<<< 1 , 1 >>>(num_objects,
+    dynamicCamShiftMain<<< 1 , num_objects >>>(num_objects,
                                     ds.d_frame,
                                     frame_length,
                                     frame_width,
@@ -261,6 +261,8 @@ bool adapt_window)
                                     ds.d_sub_heights,
                                     ds.d_sub_lengths,
                                     adapt_window);
+
+   // cudaDeviceSynchronize();
 
     if(( err =  cudaMemcpy(*cx, ds.d_cx, sizeof(unsigned int) * num_objects, cudaMemcpyDeviceToHost)) != cudaSuccess)
         printf("%s\n", cudaGetErrorString(err));

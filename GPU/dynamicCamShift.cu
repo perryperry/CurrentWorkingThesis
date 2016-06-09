@@ -507,15 +507,15 @@ unsigned int * sub_totals,
 bool adjust_window)                  
 {
     unsigned int num_block = 0;
-    unsigned int obj_cur = 0; 
+    unsigned int obj_cur = threadIdx.x; 
    
    // for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
    // {
-    float * output = g_output;
+    float * output = (obj_cur == 0) ? g_output1 : g_output2;//+ (obj_cur * TILE_WIDTH * 3);
        //printf("INSIDE OF KERNEL (%d) --> cx: %d cy: %d\n", obj_cur, cx[obj_cur], cy[obj_cur]);
       prevX[obj_cur] = 0; 
       prevY[obj_cur] = 0;
-      g_converged[obj_cur] = false;
+      //g_converged[obj_cur] = false;
       //g_sub_totals[obj_cur] = sub_widths[obj_cur] * sub_heights[obj_cur];
       num_block += ceil( (float) sub_totals[obj_cur] / (float) TILE_WIDTH);
     //  block_ends[obj_cur] = num_block;
@@ -526,14 +526,14 @@ bool adjust_window)
 
     if(num_block <= TILE_WIDTH)
     {
-     while( ! converged(num_objects) )
+     while( 1)//! converged(num_objects) )
       {
           prevX[obj_cur] = cx[obj_cur]; 
           prevY[obj_cur] = cy[obj_cur];
 
 
           blockReduce<<<grid, block>>>(
-          num_objects, 
+          obj_cur, 
           num_block,
           frame, 
           frame_width, 
@@ -551,7 +551,8 @@ bool adjust_window)
           cudaDeviceSynchronize();
          
        //  finalReduce<<< 1, num_block_roundedup, num_block_roundedup * 3 * sizeof(float) >>>( 
-     /*    finalReduce<<< 1, num_block_roundedup>>>( 
+        finalReduce<<< 1, num_block_roundedup>>>( 
+          obj_cur,
           cx, 
           cy,
           prevX,
@@ -571,11 +572,11 @@ bool adjust_window)
 
           float M00 = 0.0f, M1x = 0.0f, M1y = 0.0f;
 
-          M00 = g_output[0];
-          M1x = g_output[1];
-          M1y = g_output[2];*/
+          M00 = output[0];
+          M1x = output[1];
+          M1y = output[2];
 
-          unsigned int ind = 0;
+    /*      unsigned int ind = 0;
       float M00 = 0.0f, M1x = 0.0f, M1y = 0.0f;
 
       for(ind = 0; ind < num_block; ind ++)
@@ -583,35 +584,23 @@ bool adjust_window)
           M00 += g_output[ind];
           M1x += g_output[ind + num_block];
           M1y += g_output[ind + num_block + num_block];
-      }
+      }*/
 
           cx[obj_cur] = (int) (M1x /  M00);
           cy[obj_cur] = (int) (M1y / M00);
 
+          printf("Object (%d) %d %d\n", obj_cur, cx[obj_cur], cy[obj_cur]);
+
+
+
           int newColOffset = cx[obj_cur] - (sub_widths[obj_cur] / 2);
           int newRowOffset = cy[obj_cur] - (sub_heights[obj_cur] / 2);
 
-          col_offset[blockIdx.x] = (newColOffset > 0) ? newColOffset : 0;
-          row_offset[blockIdx.x] = (newRowOffset > 0) ? newRowOffset : 0;
+          col_offset[obj_cur] = (newColOffset > 0) ? newColOffset : 0;
+          row_offset[obj_cur] = (newRowOffset > 0) ? newRowOffset : 0;
 
         if(gpuDistance(cx[obj_cur], cy[obj_cur], prevX[obj_cur], prevY[obj_cur]) <= 1 )
           break;
-
-   
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
       }//end while
 
@@ -679,7 +668,7 @@ bool adjust_window)
 /********************************************************/
 
 __global__ void blockReduce(
-unsigned int num_objects,
+unsigned int obj_cur,
 unsigned int num_block, 
 unsigned char * frame,  
 unsigned int frame_width, 
@@ -693,43 +682,35 @@ float * output)
   __shared__ float shared_M00[1024];
   __shared__ float shared_M1x[1024];
   __shared__ float shared_M1y[1024];
-  __shared__ unsigned int shared_hist_offset[1];
-  __shared__ unsigned int shared_obj_id[1];
-  __shared__ unsigned int shared_thread_offset[1];
 
   unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
   unsigned int tid = threadIdx.x;
   unsigned int sub_col = 0;
   unsigned int sub_row = 0;
   unsigned int absolute_index = 0;
+  unsigned int hist_offset = obj_cur * HIST_BUCKETS;
 
-  if(tid == 0)
+
+
+
+
+
+
+
+
+
+
+
+  if(i < sub_totals[obj_cur]) 
   {
-    shared_obj_id[0] = 0; //getObjID(block_ends, num_objects);
-    shared_hist_offset[0] = shared_obj_id[0] * HIST_BUCKETS;
-    //printf("Block dim x: %d\n", blockDim.x);
-   // if(shared_obj_id[0] != 0 )
-    //  shared_thread_offset[0] = block_ends[shared_obj_id[0] - 1] * 1024;
-   // else
-      shared_thread_offset[0] = 0;
-  }
-  __syncthreads();
+      sub_col = i % sub_widths[obj_cur];
+      sub_row = i / sub_widths[obj_cur];
 
-  //if(  g_converged[shared_obj_id[0]] )
-   // return;
-
- // i -= shared_thread_offset[0];
-
-  if(i < sub_totals[shared_obj_id[0]]) 
-  {
-      sub_col = i % sub_widths[shared_obj_id[0]];
-      sub_row = i / sub_widths[shared_obj_id[0]];
-
-      absolute_index = (row_offset[ shared_obj_id[0] ] * frame_width) + col_offset[ shared_obj_id[0] ] + sub_col + (frame_width * sub_row);
+      absolute_index = (row_offset[ obj_cur ] * frame_width) + col_offset[ obj_cur ] + sub_col + (frame_width * sub_row);
       
-      shared_M00[tid] = const_histogram[ (frame[absolute_index] / 3) + shared_hist_offset[0]];
-      shared_M1x[tid] = ((float)(sub_col + col_offset[shared_obj_id[0]])) * shared_M00[tid];
-      shared_M1y[tid] = ((float)(sub_row + row_offset[shared_obj_id[0]])) * shared_M00[tid];
+      shared_M00[tid] = const_histogram[ (frame[absolute_index] / 3) + hist_offset ];
+      shared_M1x[tid] = ((float)(sub_col + col_offset[obj_cur])) * shared_M00[tid];
+      shared_M1y[tid] = ((float)(sub_row + row_offset[obj_cur])) * shared_M00[tid];
   }
   else 
   {
@@ -753,18 +734,19 @@ float * output)
   if(tid < 32){
      warpReduce(shared_M00, shared_M1x, shared_M1y, tid, blockDim.x);
   }
-
+   __syncthreads(); 
   // write result for this block to global mem
   if (tid == 0) {
-    g_output[blockIdx.x] = shared_M00[0]; 
-    g_output[blockIdx.x + num_block] = shared_M1x[0]; 
-    g_output[blockIdx.x + num_block + num_block] = shared_M1y[0]; 
+    output[blockIdx.x] = shared_M00[0]; 
+    output[blockIdx.x + num_block] = shared_M1x[0]; 
+    output[blockIdx.x + num_block + num_block] = shared_M1y[0]; 
   }
 } 
 
 /********************************************************/
 
 __global__ void finalReduce(
+unsigned int obj_cur,
 unsigned int * cx, 
 unsigned int * cy,
 unsigned int * prevX,
@@ -813,7 +795,7 @@ bool adapt_window)
   if(tid < 32){
      warpReduce(shared_M00, shared_M1x, shared_M1y, tid, blockDim.x);
   }
-
+ __syncthreads(); 
     if(tid == 0)
     {
        output[0] = shared_M00[tid]; 

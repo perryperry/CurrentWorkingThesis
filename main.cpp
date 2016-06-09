@@ -173,9 +173,8 @@ int main(int argc, const char * argv[])
         //Read in windows from input file
         while (infile >> x >> y >> x2 >> y2)
         {
-            if(obj_cur > num_objects){
-                cout << RED "ERROR: Too many lines in input file for number of objects to track!" RESET<< endl;
-                exit(-1);
+            if(obj_cur >= num_objects){
+                break;
             }
             printf("Initializes search window #%d: (%d, %d) to (%d, %d)\n", obj_cur, x, y, x2, y2);
             cpu_objects[obj_cur].init(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));

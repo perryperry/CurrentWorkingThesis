@@ -8,7 +8,7 @@
 #define MAX_OBJECTS 3
 #define TILE_WIDTH 1024
 //1024 * 1024 * 3 <--(max blocks, threads per block, 3 moments of camshift)
-#define MAX_OUTPUT TILE_WIDTH * 3 * MAX_OBJECTS
+#define MAX_OUTPUT TILE_WIDTH * 3
 #define SHARED_SIZE_LIMIT 1024
 #define HIST_BUCKETS 60
 #define FRAME_WIDTH 1080
@@ -18,7 +18,9 @@ __constant__ float const_histogram[HIST_BUCKETS * MAX_OBJECTS];
 
 /************** Static Device Memory ********************/
 
-__device__ float g_output[MAX_OUTPUT];
+__device__ float g_output1[MAX_OUTPUT];
+__device__ float g_output2[MAX_OUTPUT];
+
 __device__ bool  g_converged[MAX_OBJECTS];
 
 /********************************************************/
@@ -80,7 +82,7 @@ bool adjust_window);
 /********************************************************/
 
 __global__ void blockReduce(
-unsigned int num_objects,
+unsigned int obj_cur,
 unsigned int num_block,
 unsigned char * frame,  
 unsigned int frame_width, 
@@ -94,6 +96,7 @@ float * output);
 /********************************************************/
 
 __global__ void finalReduce(
+unsigned int obj_cur,
 unsigned int * cx,
 unsigned int * cy,
 unsigned int * prevX,

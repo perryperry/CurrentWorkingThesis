@@ -10,7 +10,7 @@
     return FRAME_TOTAL;
 }*/
 
-__device__ unsigned long upper_power_of_two(unsigned long v)
+__device__ unsigned long roundToPow2(unsigned long v)
 {
     v--;
     v |= v >> 1;
@@ -127,6 +127,7 @@ unsigned int blocksize)
 /********************************************************/
 
 __device__ void adjustWindow(
+bool shouldAdjust,
 double M00, 
 int newX,
 int newY,
@@ -135,30 +136,53 @@ int * newColOffset,
 unsigned int * sub_widths, 
 unsigned int * sub_heights, 
 unsigned int * sub_totals,
-int objectID)
+int obj_cur)
 {
-	int width = ceil(2.0 * sqrt(M00));
+  int bottomRightX = 0;
+  int bottomRightY = 0;
+  int width = sub_widths[obj_cur], height = sub_heights[obj_cur];
+  if(shouldAdjust)
+  {
+  	 width = ceil(2.0 * sqrt(M00));
 
-	if(width < 20){
-		width = 200;
-	}
+  	if(width < 20){
+  		width = 200;
+  	}
 
-	int height = ceil(width * 1.1);
-	*newColOffset =  newX - (width / 2); // x
-	*newRowOffset = newY - (height / 2); // y
-	int bottomRightX = *newColOffset + width;
-	int bottomRightY = *newRowOffset + height;
-	if(bottomRightX > FRAME_WIDTH - 1)
-	{
-	  width = FRAME_WIDTH - *newColOffset - 1;
-	}
-	if(bottomRightY > FRAME_HEIGHT - 1)
-	{
-	  height = FRAME_HEIGHT - *newRowOffset - 1;
-	}
-	sub_widths [objectID] = width;
-	sub_heights[objectID] = height;
-	sub_totals [objectID] = width * height;
+  	height = ceil(width * 1.1);
+  	*newColOffset =  newX - (width / 2); // x
+  	*newRowOffset = newY - (height / 2); // y
+  	bottomRightX = *newColOffset + width;
+  	bottomRightY = *newRowOffset + height;
+  }
+  else
+  {
+
+    *newColOffset = newX - (sub_widths[obj_cur] / 2); // x
+    *newRowOffset = newY - (sub_heights[obj_cur] / 2); // y
+    bottomRightX = *newColOffset + sub_widths[obj_cur];
+    bottomRightY = *newRowOffset + sub_heights[obj_cur];
+
+  }
+
+  if(bottomRightX > FRAME_WIDTH - 1)
+  {
+    width = FRAME_WIDTH - *newColOffset - 1;
+  }
+  if(bottomRightY > FRAME_HEIGHT - 1)
+  {
+
+    printf("%s --> %d \n", "BEFORE", sub_heights[obj_cur]);
+    height = FRAME_HEIGHT - *newRowOffset - 1;
+
+    printf("%s --> %d \n", "THIS HAPPEN?", height);
+  }
+  if(width > 0 )
+    sub_widths [obj_cur] = width;
+  if(height > 0)
+    sub_heights[obj_cur] = height;
+
+  sub_totals [obj_cur] = width * height;
 }
 
 __global__ void dynamicCamShiftMain(
@@ -204,7 +228,7 @@ bool adjust_window)
           col_offset,
           output);
 
-          num_block_roundedup = upper_power_of_two(num_block);
+          num_block_roundedup = roundToPow2(num_block);
 
           cudaDeviceSynchronize();
          
@@ -239,13 +263,12 @@ bool adjust_window)
           int newColOffset = cx[obj_cur] - (sub_widths[obj_cur] / 2);
           int newRowOffset = cy[obj_cur] - (sub_heights[obj_cur] / 2);
 
-          if( adjust_window )
-          {
-              adjustWindow(M00, newX, newY, &newRowOffset, &newColOffset, sub_widths, sub_heights, sub_totals, obj_cur);
-              num_block = ceil( (float) sub_totals[obj_cur] / (float) TILE_WIDTH);
-              block = dim3(TILE_WIDTH, 1, 1);
-              grid = dim3(num_block, 1, 1);
-          }
+        
+          adjustWindow(adjust_window, M00, newX, newY, &newRowOffset, &newColOffset, sub_widths, sub_heights, sub_totals, obj_cur);
+          num_block = ceil( (float) sub_totals[obj_cur] / (float) TILE_WIDTH);
+          block = dim3(TILE_WIDTH, 1, 1);
+          grid = dim3(num_block, 1, 1);
+         
           
           col_offset[obj_cur] = (newColOffset > 0) ? newColOffset : 0;
           row_offset[obj_cur] = (newRowOffset > 0) ? newRowOffset : 0;
@@ -363,7 +386,7 @@ bool adapt_window)
       shared_M1x[tid] = output[tid + num_block]; //M1x
       shared_M1y[tid] = output[tid + num_block + num_block];//M1y
     }
-    else
+   else
    {
      shared_M00[tid] = 0.0; //M00
      shared_M1x[tid] = 0.0; //M1x
@@ -371,25 +394,25 @@ bool adapt_window)
    }
     __syncthreads();
 
-    for (unsigned int stride = blockDim.x / 2; stride > 32; stride >>= 1) 
-    { 
-      if(tid < stride)
-      {
-        shared_M00[tid] += shared_M00[tid + stride]; 
-        shared_M1x[tid] += shared_M1x[tid + stride]; 
-        shared_M1y[tid] += shared_M1y[tid + stride]; 
-      }
-      __syncthreads(); 
+  for (unsigned int stride = blockDim.x / 2; stride > 32; stride >>= 1) 
+  { 
+    if(tid < stride)
+    {
+      shared_M00[tid] += shared_M00[tid + stride]; 
+      shared_M1x[tid] += shared_M1x[tid + stride]; 
+      shared_M1y[tid] += shared_M1y[tid + stride]; 
     }
+    __syncthreads(); 
+  }
 
   if(tid < 32){
      warpReduce(shared_M00, shared_M1x, shared_M1y, tid, blockDim.x);
   }
  __syncthreads(); 
-    if(tid == 0)
-    {
-       output[0] = shared_M00[tid]; 
-       output[1] = shared_M1x[tid]; 
-       output[2] = shared_M1y[tid]; 
-    }
+  if(tid == 0)
+  {
+     output[0] = shared_M00[tid]; 
+     output[1] = shared_M1x[tid]; 
+     output[2] = shared_M1y[tid]; 
+  }
 }

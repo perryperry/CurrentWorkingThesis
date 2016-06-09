@@ -20,8 +20,8 @@
 #include <chrono>
 #include <pthread.h>
 #include <iostream>
-
-
+#include <fstream>
+#include <string>
 //print colors
 #define RESET "\033[0m"
 #define RED "\x1B[31m"
@@ -40,6 +40,46 @@ using namespace std::chrono;
 #define MAXTHREADS 3
 
 #include <stdio.h>
+
+void writeHistogram(float * histogram, unsigned int num_objects )
+{
+    string hist_filename;
+    printf("Enter the histogram output file name:");
+    cin >> hist_filename;
+    int i = 0;
+    float line;
+    ofstream myfile( hist_filename );
+    if (myfile.is_open())
+    {
+        for(i = 0; i < num_objects * BUCKETS; i++)
+        {
+           myfile << histogram[i] << endl;
+        }
+        myfile.close();
+    }
+    else cout << "Unable to open file";
+}
+
+void loadHistogram(float * histogram, unsigned int num_objects )
+{
+    string hist_filename;
+    printf("Enter the histogram input file name:");
+    cin >> hist_filename;
+    int i = 0;
+    float line;
+    ifstream myfile( hist_filename );
+    if (myfile.is_open())
+    {
+        while ( myfile >> line )
+        {
+            histogram[i++] = line;
+            if(i == BUCKETS * num_objects)
+                break;
+        }
+        myfile.close();
+    }
+    else cout << "Unable to open file";
+}
 
 Mat removeBackGround(Mat frame, Ptr<BackgroundSubtractor> mog2)
 {
@@ -106,7 +146,7 @@ void * test(void * data)
     printf("%s\n", str);
 }
 
-void menu(unsigned int * num_objects, bool * deviceProp, bool * cpu, bool * gpu, bool * bgRemove, bool * windowAdjust)
+void menu(unsigned int * num_objects, bool * deviceProp, bool * cpu, bool * gpu, bool * bgRemove, bool * windowAdjust, bool * histLoad)
 {
     unsigned int answer = 0;
     cout << YELLOW "\n##############################################################\n";
@@ -133,6 +173,10 @@ void menu(unsigned int * num_objects, bool * deviceProp, bool * cpu, bool * gpu,
     cout << CYNA "Should background remove" << RED " (0/1):";
     scanf("%d", &answer);
     *bgRemove = answer;
+    cout << CYNA "Should load histogram file" << RED " (0/1):";
+    scanf("%d", &answer);
+    *histLoad = answer;
+    
     cout << YELLOW "##############################################################\n\n" RESET;
 
     if(*num_objects == 0)
@@ -153,10 +197,11 @@ int main(int argc, const char * argv[])
     bool shouldGPU = false;
     bool shouldBackProjectFrame = true;
     bool shouldPrint = false;
+    bool shouldLoadHistogram = false;
     unsigned int num_objects = 1;
    
     parameterCheck(argc);
-    menu(&num_objects, &shouldDisplayDeviceProperties, &shouldCPU, &shouldGPU, &shouldBackgroundRemove, &shouldAdjustWindowSize);
+    menu(&num_objects, &shouldDisplayDeviceProperties, &shouldCPU, &shouldGPU, &shouldBackgroundRemove, &shouldAdjustWindowSize, &shouldLoadHistogram);
     
     if( shouldDisplayDeviceProperties )
         printDeviceProperties();
@@ -244,7 +289,18 @@ int main(int argc, const char * argv[])
         //holds the bgr data from the entire frame, for gpu conversion to hue
        unsigned char * bgr = (unsigned char *) malloc(sizeof(unsigned char ) * frame.total() * 3);
     
-        camShift.createHistogram(entireHueArray, step, cpu_objects, &histogram, num_objects);
+        if( shouldLoadHistogram )
+        {
+            loadHistogram(histogram, num_objects);
+         
+            for(int i = 0; i < num_objects * BUCKETS ; i++)
+                cout << histogram[i] << endl;
+        }
+        else
+        {
+            camShift.createHistogram(entireHueArray, step, cpu_objects, &histogram, num_objects);
+            writeHistogram(histogram, num_objects);
+        }
         
         if(shouldGPU)
             mainConstantMemoryHistogramLoad(histogram, num_objects);
@@ -322,8 +378,8 @@ int main(int argc, const char * argv[])
             /******************************** GPU MeanShift until Convergence **********************************************/
             if(shouldGPU)
             {
-               // memcpy(bgr, frame.data, sizeof(unsigned char ) * frame.total() * 3);
-               // gpu_bgr_to_hue_time += launchGPU_BGR_to_Hue(bgr, *ds, hueLength);
+                memcpy(bgr, frame.data, sizeof(unsigned char ) * frame.total() * 3);
+                gpu_bgr_to_hue_time += launchGPU_BGR_to_Hue(bgr, *ds, hueLength);
                 gpu_time_cost += gpuCamShift(
                                             *ds,
                                             num_objects,
@@ -348,7 +404,8 @@ int main(int argc, const char * argv[])
                // if(shouldCPU)
                     //camShift.backProjectHistogram(entireHueArray, step, &frame, cpu_objects[0], histogram);
            }
-            printf(BLUE "Frame #%d processed\n", frame_count++);
+           if(shouldCPU || shouldGPU)
+               printf(BLUE "Frame #%d processed\n", frame_count++);
             outputVideo.write(frame);
                 
          }//end while processing video frames
@@ -377,7 +434,7 @@ int main(int argc, const char * argv[])
         printf( YELLOW "%f\n\n", cpu_average_time_cost/ gpu_average_time_cost);
             
         printf(RED "Total Speed-up: ");
-        printf(YELLOW "%f\n", (cpu_average_time_cost + cpu_average_bgr_hue_time) / (gpu_average_time_cost + gpu_average_time_cost));
+        printf(YELLOW "%f\n", (cpu_average_time_cost + cpu_average_bgr_hue_time) / (gpu_average_time_cost + gpu_average_bgr_hue_time));
     
         //clean-up
         outputVideo.release();

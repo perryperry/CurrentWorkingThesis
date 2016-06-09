@@ -21,5 +21,5 @@ BUILD/main.o:	main.cpp
 clean:
 	rm BUILD/* out.mov 
 run:
-	./BUILD/gpuMeanShift INPUT/in3.mov INPUT/windows.in3
+	./BUILD/gpuMeanShift INPUT/in1.mov INPUT/windows.in1.test1
 

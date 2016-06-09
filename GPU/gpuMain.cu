@@ -235,7 +235,7 @@ bool adapt_window)
     cudaEventCreate(&launch_end);
     cudaEventRecord(launch_begin,0);
     //Copy new frame into device memory
-    cudaMemcpy(ds.d_frame, frame, frame_length * sizeof(unsigned char), cudaMemcpyHostToDevice);
+   // cudaMemcpy(ds.d_frame, frame, frame_length * sizeof(unsigned char), cudaMemcpyHostToDevice);
     
     dynamicCamShiftMain<<< 1 , num_objects >>>(num_objects,
                                     ds.d_frame,

@@ -193,7 +193,6 @@ int main(int argc, const char * argv[])
         unsigned int * gpu_cy = (unsigned int *) malloc(sizeof(int) * num_objects); //centroid y for gpu
         
         //For multi-object
-        unsigned int * obj_block_ends = (unsigned int *) malloc(sizeof(int) * num_objects); //ending block of each object in kernel
         unsigned int * subFrameLengths = (unsigned int *) malloc(sizeof(int) * num_objects);;
         unsigned int * sub_widths = (unsigned int *) malloc(sizeof(int) * num_objects);;
         unsigned int * sub_heights = (unsigned int *) malloc(sizeof(int) * num_objects);
@@ -233,14 +232,6 @@ int main(int argc, const char * argv[])
             totalFrames = cap.get(CV_CAP_PROP_FRAME_COUNT);
         }
 
-         /*************************************** Testing Pthread *********************************************/
-        
-        /* pthread_t thread1, thread2;
-         pthread_create(&thread1, NULL, test, (void *)"Keeping it trillion from thread 1.\n");
-         pthread_create(&thread2, NULL, test, (void *)"Keeping it trillion from thread 2.\n");
-        
-         pthread_join(thread1, NULL);*/
-
         /************************************* First Frame initialize and process ****************************************/
         cap.read(frame);
   
@@ -271,18 +262,17 @@ int main(int argc, const char * argv[])
             
       
             if(shouldGPU)//gpu device struct for kernel memory re-use
-                unsigned int num_block = initDeviceStruct(num_objects,
-                                                         ds,
-                                                         obj_block_ends,
-                                                         entireHueArray,
-                                                         hueLength,
-                                                         gpu_cx,
-                                                         gpu_cy,
-                                                         gpu_col_offset,
-                                                         gpu_row_offset,
-                                                         subFrameLengths,
-                                                         sub_widths,
-                                                         sub_heights);
+                initDeviceStruct(num_objects,
+                                 ds,
+                                 entireHueArray,
+                                 hueLength,
+                                 gpu_cx,
+                                 gpu_cy,
+                                 gpu_col_offset,
+                                 gpu_row_offset,
+                                 subFrameLengths,
+                                 sub_widths,
+                                 sub_heights);
         
         outputVideo.write(frame);
         
@@ -402,7 +392,6 @@ int main(int argc, const char * argv[])
         free(subFrameLengths);
         free(sub_widths);
         free(sub_heights);
-        free(obj_block_ends);
         free(bgr);
     }//end should not display device properties
     

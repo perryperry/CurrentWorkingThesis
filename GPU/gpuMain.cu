@@ -87,10 +87,9 @@ void mainConstantMemoryHistogramLoad(float * histogram, unsigned int num_objects
   setConstantMemoryHistogram(histogram);
 }
 
-unsigned int initDeviceStruct(
+float initDeviceStruct(
 unsigned int num_objects, 
 d_struct * ds, 
-unsigned int * block_ends, 
 unsigned char * frame, 
 unsigned int frameLength, 
 unsigned int * cx, 
@@ -108,24 +107,20 @@ unsigned int * sub_heights)
     unsigned int * d_prevY;
     unsigned int * d_col_offset;
     unsigned int * d_row_offset;
-    unsigned int * d_block_ends;
     unsigned int * d_sub_widths;
     unsigned int * d_sub_heights;
     unsigned int * d_sub_lengths;
     unsigned char * d_frame;
     unsigned char * d_bgr;
 
-    unsigned int num_block = 0;
-    unsigned int obj_cur = 0;
-    unsigned int tile_width = 1024;
 
-    for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
-    {
-       num_block += ceil( (float) sub_lengths[obj_cur] / (float) tile_width);
-       block_ends[obj_cur] = num_block;
-       //printf("SUB LENGTHS: %d sub_widths: %d sub_heights: %d Combined: %d\n", sub_lengths[obj_cur], sub_widths[obj_cur], sub_heights[obj_cur], sub_widths[obj_cur] * sub_heights[obj_cur]);
-      // printf("CX: %d CY: %d\n", cx[obj_cur], cy[obj_cur]);
-    }
+    cudaEvent_t launch_begin, launch_end; 
+    float time = 0.0f;
+    cudaEventCreate(&launch_begin);
+    cudaEventCreate(&launch_end);
+    cudaEventRecord(launch_begin,0);
+
+
     if(( err = cudaMalloc((void **)&d_frame, frameLength * sizeof(unsigned char))) != cudaSuccess)
           printf("%s\n", cudaGetErrorString(err));
 
@@ -186,12 +181,6 @@ unsigned int * sub_heights)
     if(( err = cudaMemcpy(d_sub_heights, sub_heights, sizeof(unsigned int) * num_objects, cudaMemcpyHostToDevice)) != cudaSuccess)
            printf("%s\n", cudaGetErrorString(err));
 
-    if(( err = cudaMalloc((void **)&d_block_ends, sizeof(int) * num_objects)) != cudaSuccess) 
-          printf("%s\n", cudaGetErrorString(err));
-
-    if(( err = cudaMemcpy(d_block_ends, block_ends, num_objects * sizeof(int), cudaMemcpyHostToDevice)) != cudaSuccess)
-           printf("%s\n", cudaGetErrorString(err));
-
     (*ds).d_bgr = d_bgr;
     (*ds).d_frame = d_frame;
     (*ds).d_cx = d_cx;
@@ -203,9 +192,12 @@ unsigned int * sub_heights)
     (*ds).d_sub_lengths = d_sub_lengths;
     (*ds).d_sub_widths = d_sub_widths;
     (*ds).d_sub_heights = d_sub_heights;
-    (*ds).d_block_ends = d_block_ends;
 
-    return num_block;
+    cudaEventRecord(launch_end,0);
+    cudaEventSynchronize(launch_end);
+    cudaEventElapsedTime(&time, launch_begin, launch_end);
+
+  return time;
 }
 
 void freeDeviceStruct(d_struct * ds)
@@ -221,7 +213,6 @@ void freeDeviceStruct(d_struct * ds)
     cudaFree((*ds).d_sub_lengths);
     cudaFree((*ds).d_sub_widths);
     cudaFree((*ds).d_sub_heights);
-    cudaFree((*ds).d_block_ends);
 }
 
 
@@ -250,7 +241,6 @@ bool adapt_window)
                                     ds.d_frame,
                                     frame_length,
                                     frame_width,
-                                    ds.d_block_ends,
                                     ds.d_cx,
                                     ds.d_cy,
                                     ds.d_prevX,

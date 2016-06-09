@@ -30,10 +30,9 @@ void printDeviceProperties();
 
 void timeMemoryTransfer();
 
-unsigned int initDeviceStruct(
+float initDeviceStruct(
 unsigned int num_objects,
 d_struct * ds,
-unsigned int * block_ends,
 unsigned char * frame,
 unsigned int frameLength,
 unsigned int * cx,

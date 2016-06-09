@@ -13,7 +13,7 @@
 #define HIST_BUCKETS 60
 #define FRAME_WIDTH 1080
 #define FRAME_HEIGHT 720
-
+#define LOST_OBJECT 20
 __constant__ float const_histogram[HIST_BUCKETS * MAX_OBJECTS];
 
 /************** Static Device Memory ********************/
@@ -67,7 +67,6 @@ unsigned int num_objects,
 unsigned char * frame,
 unsigned int frame_total,
 unsigned int frame_width,
-unsigned int * block_ends,
 unsigned int * cx,
 unsigned int * cy,
 unsigned int * prevX,
@@ -88,7 +87,6 @@ unsigned char * frame,
 unsigned int frame_width, 
 unsigned int * sub_widths,
 unsigned int * sub_totals,
-unsigned int * block_ends,
 unsigned int * row_offset,
 unsigned int * col_offset,
 float * output);
@@ -106,14 +104,13 @@ unsigned int * sub_heights,
 unsigned int * sub_totals,
 unsigned int * row_offset,
 unsigned int * col_offset,
-unsigned int * block_ends,
 float * output,
 int num_block,
 bool adjust_window);
 
 /********************************************************/
 
-__device__ void adaptWindow(
+__device__ void adjustWindow(
 double M00,
 int newX,
 int newY,

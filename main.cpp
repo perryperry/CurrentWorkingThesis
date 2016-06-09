@@ -212,7 +212,7 @@ int main(int argc, const char * argv[])
         
         ifstream infile(argv[2]);
         
-        RegionOfInterest cpu_objects[num_objects];
+        RegionOfInterest * cpu_objects = (RegionOfInterest * ) malloc(sizeof(RegionOfInterest) * num_objects);
         RegionOfInterest gpu_objects[num_objects];
         
         
@@ -375,27 +375,18 @@ int main(int argc, const char * argv[])
             {
                for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
                {
-                    cpu_cx = cpu_objects[obj_cur].getCenterX();
-                    cpu_cy = cpu_objects[obj_cur].getCenterY();
-                   
-                   
-                    unsigned int width = cpu_objects[obj_cur]._width, height = cpu_objects[obj_cur]._height;
-                    cpu_time_cost += camShift.cpuCamShift(entireHueArray,
+                    cpu_time_cost += camShift.cpuCamShift(
+                                                         entireHueArray,
                                                          step,
-                                                         cpu_objects[obj_cur],
+                                                         &cpu_objects,
                                                          obj_cur,
                                                          histogram,
                                                          shouldPrint,
-                                                         &cpu_cx,
-                                                         &cpu_cy,
-                                                         &width,
-                                                         &height,
                                                          hueLength,
                                                          &cpu_angle,
-                                                         shouldAdjustWindowSize);
-                        
-                   cpu_objects[obj_cur].setWidthHeight(width, height);
-                   cpu_objects[obj_cur].setCentroid(Point(cpu_cx, cpu_cy));
+                                                         shouldAdjustWindowSize
+                                                         );
+                   
                    cpu_objects[obj_cur].drawCPU_ROI(&frame, obj_cur, cpu_angle);
               }
             }
@@ -410,7 +401,8 @@ int main(int argc, const char * argv[])
                                             num_objects,
                                             entireHueArray,
                                             hueLength,
-                                            shouldAdjustWindowSize);
+                                            shouldAdjustWindowSize
+                                            );
              
                 for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
                 {
@@ -476,7 +468,7 @@ int main(int argc, const char * argv[])
         free(sub_widths);
         free(sub_heights);
         free(bgr);
-        
+        free(cpu_objects);
         
         freeHostROI(h_roi_gpu);
         

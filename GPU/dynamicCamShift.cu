@@ -1,15 +1,34 @@
 #include "dynamicCamShift.h"
 
-__device__ unsigned int setWindowToEntireFrame(unsigned int obj, unsigned int ** topY, unsigned int ** topX, unsigned int ** width, unsigned int ** height, unsigned int ** length)
+//##################################################################
+// Set the search window to the size of the entire frame.
+// Used to measure the timecost of processing the entire frame.
+// Future use 
+//##################################################################
+__device__ unsigned int setWindowToEntireFrame(
+  unsigned int obj, 
+  unsigned int ** topX, 
+  unsigned int ** topY,
+  unsigned int ** bottomX, 
+  unsigned int ** bottomY, 
+  unsigned int ** width, 
+  unsigned int ** height, 
+  unsigned int ** length)
 {
-    (*topY)[obj] = 0;
-    (*topX)[obj] = 0;
+    (*topX)[obj]       = 0;
+    (*topY)[obj]       = 0;
+    (*bottomX)[obj]    = FRAME_WIDTH - 1;
+    (*bottomY)[obj]    = FRAME_HEIGHT - 1;
     (*width)[obj]      = FRAME_WIDTH - 1;
     (*height)[obj]     = FRAME_HEIGHT - 1;
-    (*length)[obj]     = FRAME_TOTAL;
+    (*length)[obj]     = (FRAME_WIDTH - 1) * (FRAME_HEIGHT - 1);
     return FRAME_TOTAL;
 }
 
+//##################################################################
+// Rounds the number to the next highest power of 2 
+// For the final reduction of the blocks' results
+//##################################################################
 __device__ unsigned long roundToPow2(unsigned long v)
 {
     v--;
@@ -22,14 +41,17 @@ __device__ unsigned long roundToPow2(unsigned long v)
     return v;
 }
 
-
+//##################################################################
+// sets the static constant memory histogram
+//##################################################################
 __host__ void setConstantMemoryHistogram(float * histogram)
 {
     cudaMemcpyToSymbol(const_histogram, histogram, sizeof(float) * HIST_BUCKETS * MAX_OBJECTS);
 }
 
-/********************************************************/
-
+//##################################################################
+// Calculates the distance between points
+//##################################################################
 __device__ unsigned int gpuDistance(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2)
 {
     unsigned int distx = (x2 - x1) * (x2 - x1);
@@ -40,8 +62,10 @@ __device__ unsigned int gpuDistance(unsigned int x1, unsigned int y1, unsigned i
     return (unsigned int) dist;
 }
 
+//##################################################################
 //https://gist.github.com/yoggy/8999625
 //http://docs.opencv.org/2.4/modules/imgproc/doc/miscellaneous_transformations.html
+//##################################################################
 __global__ void gpuBGRtoHue(unsigned char * bgr, unsigned char * hueArray, int total)
 {
 	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
@@ -90,11 +114,11 @@ __global__ void gpuBGRtoHue(unsigned char * bgr, unsigned char * hueArray, int t
  }
 }
 
-/********************************************************/
-
-
-/********************************************************/
-
+//##################################################################
+// Unfolded reduction outside of the loop,
+// because it does not need the __syncThreads(), the threads in the
+// warp execute at the same time and are strided avoiding bank issue.
+//##################################################################
 __device__ void warpReduce(
 volatile float* shared_M00, 
 volatile float* shared_M1x, 
@@ -124,8 +148,12 @@ unsigned int blocksize)
     if (blocksize >= 2)  shared_M1y[tid] += shared_M1y[tid + 1];
 }
 
-/********************************************************/
 
+//##################################################################
+// Either resizes the window based on the first moment
+// and/or checks for corners out of bounds, 
+// shrinks the window size, if out of bounds. 
+//##################################################################
 __device__ void adjustWindow(
 bool shouldAdjust,
 double M00, 
@@ -141,47 +169,49 @@ unsigned int * sub_totals,
 int obj_cur)
 {
   int width = sub_widths[obj_cur], height = sub_heights[obj_cur];
+
   if(shouldAdjust)
   {
   	 width = ceil(2.0 * sqrt(M00));
-
-  	if(width < 20){
-  		width = 200;
-  	}
-
-  	height = ceil(width * 1.1);
-  	*newTopX =  newCX - (width / 2); // x
-  	*newTopY = newCY - (height / 2); // y
-  	*newBottomX = *newTopX + width;
-  	*newBottomY = *newTopY + height;
+     if(width < 20)
+      width = 200;
+     height = ceil(width * 1.1);
   }
-  else
+  
+  *newTopX =  newCX - (width / 2); // x
+  *newTopY = newCY - (height / 2); // y
+
+  if(*newTopX < 0)
   {
-
-    *newTopX = newCX - (sub_widths[obj_cur] / 2); // x
-    *newTopY = newCY - (sub_heights[obj_cur] / 2); // y
-    *newBottomX = *newTopX + sub_widths[obj_cur];
-    *newBottomY = *newTopY + sub_heights[obj_cur];
+      *newTopX = 0;
+      //width = *newBottomX;
   }
+  if(*newTopY < 0)
+  {
+      *newTopY = 0;
+      //height = *newBottomY;
+  }
+
+  *newBottomX = *newTopX + width;
+  *newBottomY = *newTopY + height;
 
   if(*newBottomX > FRAME_WIDTH - 1)
   {
     width = FRAME_WIDTH - *newTopX - 1;
     *newBottomX = FRAME_WIDTH - 1;
   }
+
   if(*newBottomY > FRAME_HEIGHT - 1)
   {
 
-    printf("%s --> %d \n", "BEFORE", sub_heights[obj_cur]);
+    //printf("%s --> %d \n", "BEFORE", sub_heights[obj_cur]);
     height = FRAME_HEIGHT - *newTopY - 1;
      *newBottomY = FRAME_HEIGHT - 1;
-    printf("%s --> %d \n", "THIS HAPPEN?", height);
+   // printf("%s --> %d \n", "THIS HAPPEN?", height);
   }
-  if(width > 0 )
-    sub_widths [obj_cur] = width;
-  if(height > 0)
-    sub_heights[obj_cur] = height;
 
+  sub_widths [obj_cur] = width;
+  sub_heights[obj_cur] = height;
   sub_totals [obj_cur] = width * height;
 }
 
@@ -199,17 +229,13 @@ unsigned int * sub_heights,
 unsigned int * sub_totals,
 bool adjust_window)                  
 {
-        unsigned int obj_cur = threadIdx.x, prevCX = 0, prevCY; 
- // setWindowToEntireFrame(obj_cur, &topY, &topX, &sub_widths, &sub_heights, &sub_totals);
-
-
-  printf("Row: %d Col: %d Width: %d Hieght: %d Total: %d\n", topY[obj_cur], topX[obj_cur], sub_widths[obj_cur], sub_heights[obj_cur], sub_totals[obj_cur]);
-
-
+    unsigned int obj_cur = threadIdx.x, prevCX = 0, prevCY; 
+    int newTopX = 0, newTopY = 0, newBottomX = 0, newBottomY = 0;
+    //printf("Row: %d Col: %d Width: %d Hieght: %d Total: %d\n", topY[obj_cur], topX[obj_cur], sub_widths[obj_cur], sub_heights[obj_cur], sub_totals[obj_cur]);
     unsigned int count = 0;
     unsigned int num_block_roundedup = 0; //num_block rounded to nearest pow of 2 for final reduce
     unsigned int num_block = ceil( (float) sub_totals[obj_cur] / (float) TILE_WIDTH);
-    float * output = (obj_cur == 0) ? g_output1 : g_output2;//+ (obj_cur * TILE_WIDTH * 3);
+    float * output = (obj_cur == 0) ? g_output1 : g_output2;
    
     dim3 block(TILE_WIDTH, 1, 1);
     dim3 grid(num_block, 1, 1);
@@ -250,19 +276,12 @@ bool adjust_window)
           cx[obj_cur] = newCX;
           cy[obj_cur] = newCY;
 
-          int newTopX = newCX - (sub_widths[obj_cur] / 2);
-          int newTopY = newCY - (sub_heights[obj_cur] / 2);
-          int newBottomX = newCX + (sub_widths[obj_cur] / 2);
-          int newBottomY = newCY + (sub_heights[obj_cur] / 2);
           adjustWindow(adjust_window, M00, newCX, newCY, &newTopX, &newTopY, &newBottomX, &newBottomY ,sub_widths, sub_heights, sub_totals, obj_cur);
           
-         
-          
-          topX[obj_cur] = (newTopX > 0) ? newTopX : 0;
-          topY[obj_cur] = (newTopY > 0) ? newTopY : 0;
+          topX[obj_cur] = newTopX;
+          topY[obj_cur] = newTopY;
           bottomX[obj_cur] = newBottomX;
           bottomY[obj_cur] = newBottomY;
-
 
           num_block = ceil( (float) sub_totals[obj_cur] / (float) TILE_WIDTH);
           block = dim3(TILE_WIDTH, 1, 1);
@@ -276,6 +295,7 @@ bool adjust_window)
         if( count > LOST_OBJECT )
         {
             printf("The GPU kernel has lost the object! --> %d\n", count);
+            setWindowToEntireFrame(obj_cur, &topY, &topX, &bottomX, &bottomY, &sub_widths, &sub_heights, &sub_totals);
             break;
         }
 

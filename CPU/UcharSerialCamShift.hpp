@@ -34,14 +34,10 @@ public:
     
     float cpuCamShift(unsigned char * hueArray,
                       unsigned int step,
-                      RegionOfInterest cpu_objects,
+                      RegionOfInterest ** roi,
                       unsigned int obj_index,
                       float * histogram,
                       bool shouldPrint,
-                      unsigned int * cpu_cx,
-                      unsigned int * cpu_cy,
-                      unsigned int * width,
-                      unsigned int * height,
                       unsigned int hueLength,
                       float * angle,
                       bool adjustWindow);

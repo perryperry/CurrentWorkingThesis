@@ -33,6 +33,12 @@ public:
     void drawCPU_ROI(Mat * frame, int obj_num, float angle);
     void drawGPU_ROI(Mat * frame, int obj_num, float angle);
     void setCentroid(Point centroid);
+    
+    
+    void setWindowToFullFrame();
+    void setCorners(Point centroid, int width, int height);
+    
+    
     void setROI(Point centroid, int width, int height);
     Point getTopLeft();
     Point getBottomRight();

@@ -30,7 +30,13 @@ void RegionOfInterest::init(Point topL, Point botR, int frameWidth, int frameHei
     _centroid = calcCentroid(topL, _width, _height);
 }
 
-
+void RegionOfInterest::setWindowToFullFrame()
+{
+    _width  = _frameWidth;
+    _height = _frameHeight;
+    _bottomRight = Point(_width - 1, _height - 1);
+    _topLeft = Point(0,0);
+}
 
 void RegionOfInterest::setWidthHeight(int width, int height)
 {
@@ -51,8 +57,12 @@ int RegionOfInterest::getTotalPixels(){
 void RegionOfInterest::setCentroid(Point centroid)
 {
     _centroid = centroid;
-    _topLeft = calcTopLeft(centroid, _width, _height);
-    _bottomRight = calcBottomRight(_topLeft, _width, _height);
+}
+
+void RegionOfInterest::setCorners(Point centroid, int width, int height)
+{
+    _topLeft = calcTopLeft(centroid, width, height);
+    _bottomRight = calcBottomRight(_topLeft, width, height);
 }
 
 void RegionOfInterest::setROI(Point centroid, int width, int height)
@@ -89,15 +99,15 @@ Point RegionOfInterest::calcBottomRight(Point topLeft, int ww, int wh)
     if(bottomRight_x > _frameWidth - 1)
     {
         bottomRight_x = _frameWidth - 1;
-        _width = _frameWidth - topLeft.x - 1;
+        _width = bottomRight_x - topLeft.x;
         
-        printf("ROI: had to adjust _width: %d, because topLeft.x: %d\n",_width, topLeft.x);
+        //printf("ROI: had to adjust _width: %d, because topLeft.x: %d\n",_width, topLeft.x);
     }
     if(bottomRight_y > _frameHeight - 1)
     {
         bottomRight_y = _frameHeight - 1;
-       _height = _frameHeight - topLeft.y - 1;
-       printf("ROI: had to adjust _height: %d, because topLeft.y: %d\n", _height, topLeft.y);
+       _height = bottomRight_y - topLeft.y;
+      // printf("ROI: had to adjust _height: %d, because topLeft.y: %d\n", _height, topLeft.y);
     }
     return Point(bottomRight_x, bottomRight_y);
 }
@@ -171,8 +181,11 @@ void RegionOfInterest::drawCPU_ROI(Mat * frame, int object_num, float angle)
             color = Scalar(100, 0, 100);
             break;
     }
+    
+   rectangle(*frame, _topLeft, _bottomRight, color, THICKNESS + 8, 8, 0);
+circle( *frame, _centroid, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
 
-    RotatedRect rRect = RotatedRect(_centroid, Size2f(_width, _height), angle);
+   /*  RotatedRect rRect = RotatedRect(_centroid, Size2f(_width, _height), angle);
     
     Point2f vertices[4];
     rRect.points(vertices);
@@ -183,7 +196,7 @@ void RegionOfInterest::drawCPU_ROI(Mat * frame, int object_num, float angle)
     
     
    // rectangle(*frame, _topLeft, _bottomRight, color, THICKNESS + 8, 8, 0);
-    circle( *frame, _centroid, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
+    circle( *frame, _centroid, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );*/
 }
 
 //Draw the thinner roi for gpu objects, different color based on object_num to the output video
@@ -201,6 +214,8 @@ void RegionOfInterest::drawGPU_ROI(Mat * frame, int object_num, float angle)
             color = Scalar(255, 0, 255);
             break;
     }
+    
+   
     
     RotatedRect rRect = RotatedRect(_centroid, Size2f(_width, _height), angle);
 
@@ -232,9 +247,7 @@ void RegionOfInterest::testDraw(Mat * frame, int object_num, Point top, Point bo
     }
     
     rectangle(*frame, top, bottom, color, THICKNESS, 8, 0);
-
-    // rectangle(*frame, _topLeft, _bottomRight, color , THICKNESS, 8, 0);
-    circle( *frame, center, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
+    circle( *frame, center, 5.0, Scalar( 255, 255, 255 ), -1, 8, 0 );
 }
 
 

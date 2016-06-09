@@ -83,43 +83,40 @@ unsigned int distance(unsigned int x1, unsigned int y1, unsigned int x2, unsigne
 float SerialCamShift::cpuCamShift(
 unsigned char * hueArray,
 unsigned int step,
-RegionOfInterest roi,
+RegionOfInterest ** roi,
 unsigned int obj_index,
 float * histogram,
 bool shouldPrint,
-unsigned int * cpu_cx,
-unsigned int * cpu_cy,
-unsigned int * width,
-unsigned int * height,
 unsigned int hueLength, //frame total
 float * angle,
 bool adjustWindow)
 {
+    unsigned int width = 0, height = 0;
     high_resolution_clock::time_point time1;
     high_resolution_clock::time_point time2;
     double M00 = 0.0, M1x = 0.0, M1y = 0.0, M2x = 0.0, M2y = 0.0, probability = 0.0, ratio = 0.0;
-    unsigned int hue = 0, prevX = 0, prevY = 0, cx = 0, cy = 0, maxHue = 0;
-  
+    unsigned int hue = 0, prevX = 0, prevY = 0, cx = 0, cy = 0, maxHue = 0, count = 0;
+    unsigned int LOST_OBJECT = 20;
     time1 = high_resolution_clock::now();
-    
-    Point topLeft = roi.getTopLeft();
-    Point bottomRight = roi.getBottomRight();
-    
-    unsigned int obj_offset = obj_index * BUCKETS; //offset to the next object's segment of the histogram
 
-    while(distance(prevX, prevY, cpu_cx[0], cpu_cy[0]) > 1)
+    unsigned int obj_offset = obj_index * BUCKETS; //offset to the next object's segment of the histogram
+    
+    while(1)
     {
+       // (*roi)[obj_index].setWindowToFullFrame();
+        width  = (*roi)[obj_index]._width;
+        height = (*roi)[obj_index]._height;
         M00 = 0.0;
         M1x = 0.0;
         M1y = 0.0;
         M2x = 0.0;
         M2y = 0.0;
-        prevX = cpu_cx[0];
-        prevY = cpu_cy[0];
+        prevX = cx;
+        prevY = cy;
      
-        for(unsigned int col = roi.getTopLeftX(); col < roi.getBottomRightX();col++)
+        for(unsigned int col = (*roi)[obj_index].getTopLeftX(); col < (*roi)[obj_index].getBottomRightX();col++)
         {
-            for(unsigned int row = roi.getTopLeftY(); row < roi.getBottomRightY();row++)
+            for(unsigned int row = (*roi)[obj_index].getTopLeftY(); row < (*roi)[obj_index].getBottomRightY();row++)
             {
                 if(step * row + col < hueLength)
                 {
@@ -132,7 +129,7 @@ bool adjustWindow)
                    // M2y += ((float)row * row ) * probability;
                 }
                 else{
-                    printf("Error in cpuCAMShift, out of bounds: %d %d\n", roi.getBottomRightX(), roi.getBottomRightY());
+                    printf("Error in cpuCAMShift, out of bounds: %d %d\n", (*roi)[obj_index].getBottomRightX(),  (*roi)[obj_index].getBottomRightY());
                 }
             }
         }
@@ -140,19 +137,14 @@ bool adjustWindow)
             
             cx = (int)(M1x / M00);
             cy = (int)(M1y / M00);
-            cpu_cx[0] = cx;
-            cpu_cy[0] = cy;
-            roi.setCentroid(Point( cpu_cx[0], cpu_cy[0] ));
-     
             
-            if(adjustWindow){
-                *width = ceil(2 * sqrt(M00));
+            if(adjustWindow)
+            {
+                width = ceil(2 * sqrt(M00));
             
-                if(*width < 20)
-                    *width = 200;
-            
-                *height = ceil(*width * 1.1);
-                roi.setWidthHeight(*width, *height);
+                if(width < 20)
+                    width = 200;
+                height = ceil(width * 1.1);
             }
         }
         else
@@ -164,25 +156,21 @@ bool adjustWindow)
         
         if(shouldPrint){
             printf("Inside CPU MeanShift ---> M00 = %lf M1x = %lf M1y = %lf \n", M00, M1x, M1y);
-            printf("Inside CPU MeanShift ---> centroid:(%d, %d), topX:%d, topY:%d\n",  cpu_cx[0],  cpu_cy[0], roi.getTopLeftX(), roi.getTopLeftY());
+            printf("Inside CPU MeanShift ---> centroid:(%d, %d), topX:%d, topY:%d\n",  cx,  cy,  (*roi)[obj_index].getTopLeftX(),  (*roi)[obj_index].getTopLeftY());
         }
+        (*roi)[obj_index].setCentroid(Point(cx,cy));
+        (*roi)[obj_index].setCorners(Point(cx, cy), width, height);
         
+        if(count > LOST_OBJECT)
+        {
+            (*roi)[obj_index].setWindowToFullFrame();
+            count = 0;
+        }
+        if( distance(prevX, prevY, cx, cy) <= 1)
+            break;
+        count++;
     }//end of converging
-    
-  /*  float numerator = 2 * (( (M1x * M1y) / M00) - (cx * cy));
-    float denomator = ((M2y / M00) - (cy * cy)) - ((M2x / M00) - (cx * cx)) ;
-    
-   *angle = atan(numerator / denomator) / 2.0;
-    
-    *angle = *angle * 180 / PI;
-    
-    
-    printf("Angle: %f\n", *angle);*/
-    
-    
-    
-    
-    
+
     if(shouldPrint)
         printf("************* CPU FINISHED A FRAME FOR OBJECT %d ***********\n", obj_index);
     time2 = high_resolution_clock::now();

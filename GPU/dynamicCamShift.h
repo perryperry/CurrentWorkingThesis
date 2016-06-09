@@ -13,6 +13,7 @@
 #define HIST_BUCKETS 60
 #define FRAME_WIDTH 1080
 #define FRAME_HEIGHT 720
+#define FRAME_TOTAL FRAME_WIDTH * FRAME_HEIGHT
 #define LOST_OBJECT 20
 __constant__ float const_histogram[HIST_BUCKETS * MAX_OBJECTS];
 
@@ -63,16 +64,14 @@ __global__ void gpuBGRtoHue(unsigned char * bgr, unsigned char * hueArray, int t
 /********************************************************/
 
 __global__ void dynamicCamShiftMain(
-unsigned int num_objects,
 unsigned char * frame,
 unsigned int frame_total,
-unsigned int frame_width,
 unsigned int * cx,
 unsigned int * cy,
-unsigned int * prevX,
-unsigned int * prevY,
-unsigned int * row_offset,
-unsigned int * col_offset,
+unsigned int * topX,
+unsigned int * topY,
+unsigned int * bottomX,
+unsigned int * bottomY,
 unsigned int * sub_widths,
 unsigned int * sub_heights,
 unsigned int * sub_totals,
@@ -83,8 +82,7 @@ bool adjust_window);
 __global__ void blockReduce(
 unsigned int obj_cur,
 unsigned int num_block,
-unsigned char * frame,  
-unsigned int frame_width, 
+unsigned char * frame,
 unsigned int * sub_widths,
 unsigned int * sub_totals,
 unsigned int * row_offset,
@@ -93,20 +91,7 @@ float * output);
 
 /********************************************************/
 
-__global__ void finalReduce(
-unsigned int obj_cur,
-unsigned int * cx,
-unsigned int * cy,
-unsigned int * prevX,
-unsigned int * prevY,
-unsigned int * sub_widths, 
-unsigned int * sub_heights,
-unsigned int * sub_totals,
-unsigned int * row_offset,
-unsigned int * col_offset,
-float * output,
-int num_block,
-bool adjust_window);
+__global__ void finalReduce(float * output, unsigned int num_block);
 
 /********************************************************/
 

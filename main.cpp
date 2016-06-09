@@ -215,6 +215,10 @@ int main(int argc, const char * argv[])
         RegionOfInterest cpu_objects[num_objects];
         RegionOfInterest gpu_objects[num_objects];
         
+        
+        h_roi * h_roi_gpu = initHostROI(num_objects);
+        
+        
         //Read in windows from input file
         while (infile >> x >> y >> x2 >> y2)
         {
@@ -224,10 +228,33 @@ int main(int argc, const char * argv[])
             printf("Initializes search window #%d: (%d, %d) to (%d, %d)\n", obj_cur, x, y, x2, y2);
             cpu_objects[obj_cur].init(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
             gpu_objects[obj_cur].init(Point(x,y), Point(x2,y2), cap.get(CV_CAP_PROP_FRAME_WIDTH), cap.get(CV_CAP_PROP_FRAME_HEIGHT));
+            
+            h_roi_gpu->h_topX[obj_cur] = x;
+            h_roi_gpu->h_topY[obj_cur] = y;
+            h_roi_gpu->h_bottomX[obj_cur] = x2;
+            h_roi_gpu->h_bottomY[obj_cur] = y2;
+            
+            h_roi_gpu->h_cx[obj_cur] = (x2 + x) / 2;
+            h_roi_gpu->h_cy[obj_cur] = (y2 + y) / 2;
+
             obj_cur++;
         }
         obj_cur = 0; //reset the current object index
         d_struct * ds = (d_struct *) malloc(sizeof(d_struct));
+        
+ 
+        
+        
+        
+        
+        
+        
+        printf("%d vs %d and %d vs %d \n", h_roi_gpu->h_cx[0],gpu_objects[0].getCenterX(), h_roi_gpu->h_cy[0], gpu_objects[0].getCenterY());
+        
+        
+        
+        
+        
         
         float gpu_time_cost = 0.0f;
         float cpu_time_cost = 0.0f;
@@ -320,12 +347,9 @@ int main(int argc, const char * argv[])
             if(shouldGPU)//gpu device struct for kernel memory re-use
                 initDeviceStruct(num_objects,
                                  ds,
+                                 h_roi_gpu,
                                  entireHueArray,
                                  hueLength,
-                                 gpu_cx,
-                                 gpu_cy,
-                                 gpu_col_offset,
-                                 gpu_row_offset,
                                  subFrameLengths,
                                  sub_widths,
                                  sub_heights);
@@ -382,20 +406,22 @@ int main(int argc, const char * argv[])
                 gpu_bgr_to_hue_time += launchGPU_BGR_to_Hue(bgr, *ds, hueLength);
                 gpu_time_cost += gpuCamShift(
                                             *ds,
+                                            h_roi_gpu,
                                             num_objects,
                                             entireHueArray,
                                             hueLength,
-                                            step,
-                                            &sub_widths,
-                                            &sub_heights,
-                                            &gpu_cx,
-                                            &gpu_cy,
                                             shouldAdjustWindowSize);
              
                 for(obj_cur = 0; obj_cur < num_objects; obj_cur++)
                 {
                     gpu_objects[obj_cur].setROI(Point(gpu_cx[obj_cur], gpu_cy[obj_cur]), sub_widths[obj_cur], sub_heights[obj_cur]);
-                    gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur, 0);
+                    //gpu_objects[obj_cur].drawGPU_ROI(&frame, obj_cur, 0);
+                    
+                    gpu_objects[obj_cur].testDraw(&frame,
+                                                  obj_cur,
+                                                  Point( h_roi_gpu->h_topX[obj_cur], h_roi_gpu->h_topY[obj_cur]),
+                                                  Point( h_roi_gpu->h_bottomX[obj_cur],h_roi_gpu->h_bottomY[obj_cur]),
+                                                  Point( h_roi_gpu->h_cx[obj_cur], h_roi_gpu->h_cy[obj_cur]));
                 }
                 
             }
@@ -450,6 +476,10 @@ int main(int argc, const char * argv[])
         free(sub_widths);
         free(sub_heights);
         free(bgr);
+        
+        
+        freeHostROI(h_roi_gpu);
+        
     }//end should not display device properties
     
     printf(MAGETA "Program exited successfully\n" RESET);

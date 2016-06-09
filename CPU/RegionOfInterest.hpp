@@ -47,7 +47,7 @@ public:
     int getBottomRightY();
     int getTopLeftX();
     int getTopLeftY();
-    
+    void testDraw(Mat * frame, int object_num, Point top, Point bottom, Point center);
 private:
     
     Point _topLeft;

@@ -11,10 +11,10 @@ struct device_struct
 {
     unsigned int *  d_cx;
     unsigned int *  d_cy;
-    unsigned int *  d_prevX;
-    unsigned int *  d_prevY;
-    unsigned int *  d_col_offset;
-    unsigned int *  d_row_offset;
+    unsigned int *  d_topX;
+    unsigned int *  d_topY;
+    unsigned int *  d_bottomX;
+    unsigned int *  d_bottomY;
     unsigned int *  d_sub_widths;
     unsigned int *  d_sub_heights;
     unsigned int *  d_sub_lengths;
@@ -23,6 +23,19 @@ struct device_struct
     unsigned char * d_bgr;
 }; typedef struct device_struct d_struct;
 
+struct host_struct
+{
+    unsigned int *  h_cx;
+    unsigned int *  h_cy;
+    unsigned int *  h_topX;
+    unsigned int *  h_topY;
+    unsigned int *  h_bottomX;
+    unsigned int *  h_bottomY;
+}; typedef struct host_struct h_roi;
+
+h_roi * initHostROI(int num_objects);
+
+void freeHostROI(h_roi * roi);
 
 float  launchGPU_BGR_to_Hue(unsigned char * bgr, d_struct ds, int total);
 
@@ -33,12 +46,9 @@ void timeMemoryTransfer();
 float initDeviceStruct(
 unsigned int num_objects,
 d_struct * ds,
+h_roi * roi,
 unsigned char * frame,
 unsigned int frameLength,
-unsigned int * cx,
-unsigned int * cy,
-unsigned int * col_offset,
-unsigned int * row_offset,
 unsigned int * subFrameLengths,
 unsigned int * sub_widths,
 unsigned int * sub_heights);
@@ -49,14 +59,10 @@ void mainConstantMemoryHistogramLoad(float * histogram, unsigned int num_objects
 
 float gpuCamShift(
 d_struct ds,
+h_roi * roi,
 unsigned int num_objects,
 unsigned char * frame,
 unsigned int frame_length,
-unsigned int frame_width,
-unsigned int ** sub_widths,
-unsigned int ** sub_heights,
-unsigned int ** cx,
-unsigned int ** cy,
 bool adjust_window);
 
 

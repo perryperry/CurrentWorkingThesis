@@ -85,6 +85,7 @@ Point RegionOfInterest::calcBottomRight(Point topLeft, int ww, int wh)
 {
     int bottomRight_x = topLeft.x + ww;
     int bottomRight_y = topLeft.y + wh;
+    
     if(bottomRight_x > _frameWidth - 1)
     {
         bottomRight_x = _frameWidth - 1;
@@ -202,7 +203,7 @@ void RegionOfInterest::drawGPU_ROI(Mat * frame, int object_num, float angle)
     }
     
     RotatedRect rRect = RotatedRect(_centroid, Size2f(_width, _height), angle);
-    
+
     Point2f vertices[4];
     rRect.points(vertices);
     for (int i = 0; i < 4; i++)
@@ -212,3 +213,34 @@ void RegionOfInterest::drawGPU_ROI(Mat * frame, int object_num, float angle)
    // rectangle(*frame, _topLeft, _bottomRight, color , THICKNESS, 8, 0);
     circle( *frame, _centroid, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
 }
+
+
+//Draw the thinner roi for gpu objects, different color based on object_num to the output video
+void RegionOfInterest::testDraw(Mat * frame, int object_num, Point top, Point bottom, Point center)
+{
+    Scalar color;
+    switch ( object_num ) {
+        case 0:
+            color = Scalar(255, 0, 0);
+            break;
+        case 1:
+            color = Scalar(255, 255, 0);
+            break;
+        default:
+            color = Scalar(255, 0, 255);
+            break;
+    }
+    
+    rectangle(*frame, top, bottom, color, THICKNESS, 8, 0);
+
+    // rectangle(*frame, _topLeft, _bottomRight, color , THICKNESS, 8, 0);
+    circle( *frame, center, 5.0, Scalar( 0, 255, 255 ), -1, 8, 0 );
+}
+
+
+
+
+
+
+
+

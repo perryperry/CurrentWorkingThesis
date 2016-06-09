@@ -1,14 +1,14 @@
 #include "dynamicCamShift.h"
 
-/*__device__ unsigned int setWindowToEntireFrame(unsigned int obj)
+__device__ unsigned int setWindowToEntireFrame(unsigned int obj, unsigned int ** topY, unsigned int ** topX, unsigned int ** width, unsigned int ** height, unsigned int ** length)
 {
-    g_row_offset[obj] = 0;
-    g_col_offset[obj] = 0;
-    g_width[obj]      = FRAME_WIDTH;
-    g_height[obj]     = FRAME_HEIGHT;
-    g_length[obj]     = FRAME_TOTAL;
+    (*topY)[obj] = 0;
+    (*topX)[obj] = 0;
+    (*width)[obj]      = FRAME_WIDTH - 1;
+    (*height)[obj]     = FRAME_HEIGHT - 1;
+    (*length)[obj]     = FRAME_TOTAL;
     return FRAME_TOTAL;
-}*/
+}
 
 __device__ unsigned long roundToPow2(unsigned long v)
 {
@@ -129,17 +129,17 @@ unsigned int blocksize)
 __device__ void adjustWindow(
 bool shouldAdjust,
 double M00, 
-int newX,
-int newY,
-int * newRowOffset, 
-int * newColOffset, 
+int newCX,
+int newCY,
+int * newTopX, 
+int * newTopY, 
+int * newBottomX, 
+int * newBottomY,
 unsigned int * sub_widths, 
 unsigned int * sub_heights, 
 unsigned int * sub_totals,
 int obj_cur)
 {
-  int bottomRightX = 0;
-  int bottomRightY = 0;
   int width = sub_widths[obj_cur], height = sub_heights[obj_cur];
   if(shouldAdjust)
   {
@@ -150,31 +150,31 @@ int obj_cur)
   	}
 
   	height = ceil(width * 1.1);
-  	*newColOffset =  newX - (width / 2); // x
-  	*newRowOffset = newY - (height / 2); // y
-  	bottomRightX = *newColOffset + width;
-  	bottomRightY = *newRowOffset + height;
+  	*newTopX =  newCX - (width / 2); // x
+  	*newTopY = newCY - (height / 2); // y
+  	*newBottomX = *newTopX + width;
+  	*newBottomY = *newTopY + height;
   }
   else
   {
 
-    *newColOffset = newX - (sub_widths[obj_cur] / 2); // x
-    *newRowOffset = newY - (sub_heights[obj_cur] / 2); // y
-    bottomRightX = *newColOffset + sub_widths[obj_cur];
-    bottomRightY = *newRowOffset + sub_heights[obj_cur];
-
+    *newTopX = newCX - (sub_widths[obj_cur] / 2); // x
+    *newTopY = newCY - (sub_heights[obj_cur] / 2); // y
+    *newBottomX = *newTopX + sub_widths[obj_cur];
+    *newBottomY = *newTopY + sub_heights[obj_cur];
   }
 
-  if(bottomRightX > FRAME_WIDTH - 1)
+  if(*newBottomX > FRAME_WIDTH - 1)
   {
-    width = FRAME_WIDTH - *newColOffset - 1;
+    width = FRAME_WIDTH - *newTopX - 1;
+    *newBottomX = FRAME_WIDTH - 1;
   }
-  if(bottomRightY > FRAME_HEIGHT - 1)
+  if(*newBottomY > FRAME_HEIGHT - 1)
   {
 
     printf("%s --> %d \n", "BEFORE", sub_heights[obj_cur]);
-    height = FRAME_HEIGHT - *newRowOffset - 1;
-
+    height = FRAME_HEIGHT - *newTopY - 1;
+     *newBottomY = FRAME_HEIGHT - 1;
     printf("%s --> %d \n", "THIS HAPPEN?", height);
   }
   if(width > 0 )
@@ -186,24 +186,28 @@ int obj_cur)
 }
 
 __global__ void dynamicCamShiftMain(
-unsigned int num_objects,
 unsigned char * frame,
 unsigned int frame_total,
-unsigned int frame_width,
 unsigned int * cx,
 unsigned int * cy,
-unsigned int * prevX,
-unsigned int * prevY,
-unsigned int * row_offset,
-unsigned int * col_offset,
+unsigned int * topX,
+unsigned int * topY,
+unsigned int * bottomX,
+unsigned int * bottomY,
 unsigned int * sub_widths,
 unsigned int * sub_heights,
 unsigned int * sub_totals,
 bool adjust_window)                  
 {
+        unsigned int obj_cur = threadIdx.x, prevCX = 0, prevCY; 
+ // setWindowToEntireFrame(obj_cur, &topY, &topX, &sub_widths, &sub_heights, &sub_totals);
+
+
+  printf("Row: %d Col: %d Width: %d Hieght: %d Total: %d\n", topY[obj_cur], topX[obj_cur], sub_widths[obj_cur], sub_heights[obj_cur], sub_totals[obj_cur]);
+
+
     unsigned int count = 0;
     unsigned int num_block_roundedup = 0; //num_block rounded to nearest pow of 2 for final reduce
-    unsigned int obj_cur = threadIdx.x; 
     unsigned int num_block = ceil( (float) sub_totals[obj_cur] / (float) TILE_WIDTH);
     float * output = (obj_cur == 0) ? g_output1 : g_output2;//+ (obj_cur * TILE_WIDTH * 3);
    
@@ -214,38 +218,24 @@ bool adjust_window)
     {
      while( 1 )
     {
-          prevX[obj_cur] = cx[obj_cur]; 
-          prevY[obj_cur] = cy[obj_cur];
+          prevCX = cx[obj_cur]; 
+          prevCY = cy[obj_cur];
 
           blockReduce<<<grid, block>>>(
           obj_cur, 
           num_block,
           frame, 
-          frame_width, 
           sub_widths,
           sub_totals, 
-          row_offset,
-          col_offset,
+          topY,
+          topX,
           output);
 
           num_block_roundedup = roundToPow2(num_block);
 
           cudaDeviceSynchronize();
          
-          finalReduce<<< 1, num_block_roundedup>>>( 
-          obj_cur,
-          cx, 
-          cy,
-          prevX,
-          prevY, 
-          sub_widths, 
-          sub_heights,
-          sub_totals,
-          row_offset,
-          col_offset,
-          output,
-          num_block,
-          adjust_window);
+          finalReduce<<< 1, num_block_roundedup>>>( output, num_block );
 
           cudaDeviceSynchronize();
 
@@ -255,25 +245,30 @@ bool adjust_window)
           M1x = output[1];
           M1y = output[2];
 
-          unsigned int newX = (int) (M1x /  M00);
-          unsigned int newY = (int) (M1y /  M00);
-          cx[obj_cur] = newX;
-          cy[obj_cur] = newY;
+          unsigned int newCX = (int) (M1x /  M00);
+          unsigned int newCY = (int) (M1y /  M00);
+          cx[obj_cur] = newCX;
+          cy[obj_cur] = newCY;
 
-          int newColOffset = cx[obj_cur] - (sub_widths[obj_cur] / 2);
-          int newRowOffset = cy[obj_cur] - (sub_heights[obj_cur] / 2);
+          int newTopX = newCX - (sub_widths[obj_cur] / 2);
+          int newTopY = newCY - (sub_heights[obj_cur] / 2);
+          int newBottomX = newCX + (sub_widths[obj_cur] / 2);
+          int newBottomY = newCY + (sub_heights[obj_cur] / 2);
+          adjustWindow(adjust_window, M00, newCX, newCY, &newTopX, &newTopY, &newBottomX, &newBottomY ,sub_widths, sub_heights, sub_totals, obj_cur);
+          
+         
+          
+          topX[obj_cur] = (newTopX > 0) ? newTopX : 0;
+          topY[obj_cur] = (newTopY > 0) ? newTopY : 0;
+          bottomX[obj_cur] = newBottomX;
+          bottomY[obj_cur] = newBottomY;
 
-        
-          adjustWindow(adjust_window, M00, newX, newY, &newRowOffset, &newColOffset, sub_widths, sub_heights, sub_totals, obj_cur);
+
           num_block = ceil( (float) sub_totals[obj_cur] / (float) TILE_WIDTH);
           block = dim3(TILE_WIDTH, 1, 1);
           grid = dim3(num_block, 1, 1);
-         
-          
-          col_offset[obj_cur] = (newColOffset > 0) ? newColOffset : 0;
-          row_offset[obj_cur] = (newRowOffset > 0) ? newRowOffset : 0;
 
-        if(gpuDistance(cx[obj_cur], cy[obj_cur], prevX[obj_cur], prevY[obj_cur]) <= 1 )
+        if(gpuDistance(cx[obj_cur], cy[obj_cur], prevCX, prevCY) <= 1 )
           break;
 
         count ++;
@@ -296,11 +291,10 @@ __global__ void blockReduce(
 unsigned int obj_cur,
 unsigned int num_block, 
 unsigned char * frame,  
-unsigned int frame_width, 
 unsigned int * sub_widths,
 unsigned int * sub_totals,
-unsigned int * row_offset,
-unsigned int * col_offset, 
+unsigned int * topY,
+unsigned int * topX, 
 float * output)
 {
   __shared__ float shared_M00[1024];
@@ -320,11 +314,11 @@ float * output)
       sub_col = i % sub_widths[obj_cur];
       sub_row = i / sub_widths[obj_cur];
 
-      absolute_index = (row_offset[ obj_cur ] * frame_width) + col_offset[ obj_cur ] + sub_col + (frame_width * sub_row);
+      absolute_index = (topY[ obj_cur ] * FRAME_WIDTH ) + topX[ obj_cur ] + sub_col + ( FRAME_WIDTH * sub_row);
       
       shared_M00[tid] = const_histogram[ (frame[absolute_index] / 3) + hist_offset ];
-      shared_M1x[tid] = ((float)(sub_col + col_offset[obj_cur])) * shared_M00[tid];
-      shared_M1y[tid] = ((float)(sub_row + row_offset[obj_cur])) * shared_M00[tid];
+      shared_M1x[tid] = ((float)(sub_col + topX[obj_cur])) * shared_M00[tid];
+      shared_M1y[tid] = ((float)(sub_row + topY[obj_cur])) * shared_M00[tid];
   }
   else 
   {
@@ -359,20 +353,7 @@ float * output)
 
 /********************************************************/
 
-__global__ void finalReduce(
-unsigned int obj_cur,
-unsigned int * cx, 
-unsigned int * cy,
-unsigned int * prevX,
-unsigned int * prevY,  
-unsigned int * sub_widths, 
-unsigned int * sub_heights,
-unsigned int * sub_totals,
-unsigned int * row_offset,
-unsigned int * col_offset,
-float * output,
-int num_block,
-bool adapt_window)
+__global__ void finalReduce(float * output, unsigned int num_block)
 {
   unsigned int tid = threadIdx.x; 
 
